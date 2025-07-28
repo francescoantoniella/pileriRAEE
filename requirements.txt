@@ -1,0 +1,12 @@
+# Dipendenze essenziali per OPC Logger
+bottle==0.13.4
+reportlab==4.4.3
+
+# Dipendenze OPC UA (opzionali - solo se si usa la modalità OPC UA)
+# asyncua==1.1.6
+# opcua==0.98.13
+
+# Note:
+# - bottle: Server web
+# - reportlab: Generazione PDF
+# - asyncua/opcua: Solo se si usa la connessione OPC UA 
