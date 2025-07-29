@@ -119,7 +119,7 @@
             <table class="table table-striped table-bordered">
                 <thead>
                     <tr>
-                        <th>Timestamp</th>
+                        <th>Ora Chiusura</th>
                         <th>Commessa</th>
                         <th>Codice CER</th>
                         <th>Ore totali</th>
@@ -133,7 +133,7 @@
                     % if commesse:
                         % for riga in commesse: 
                             <tr>
-                                <td>{{riga['timestamp']}}</td>
+                                <td>{{riga.get('timestamp_formatted', riga['timestamp'])}}</td>
                                 <td>{{riga['commessa_tx']}}</td>
                                 <td>{{riga['codice_cer_tx']}}</td>
                                 <td>{{riga['ore_totali_commessa_tx']}}</td>

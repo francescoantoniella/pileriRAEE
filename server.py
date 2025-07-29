@@ -9,6 +9,7 @@ import time
 import threading
 from config import *
 from dynamic_config import load_config, save_config, get_config_value, set_config_value
+from utils import format_timestamp_for_display
 import io
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -188,14 +189,16 @@ def generate_pdf_report(commesse, titolo, tipo_report, statistiche=None):
     # Tabella dati
     if commesse:
         # Header
-        headers = ['Timestamp', 'Commessa', 'CER', 'Ore Totali', 'Minuti Totali', 
+        headers = ['Ora Chiusura', 'Commessa', 'CER', 'Ore Totali', 'Minuti Totali', 
                   'Ore Lavorate', 'Minuti Lavorati', 'Energia (kWh)']
         
         # Dati
         data = [headers]
         for riga in commesse:
+            # Formatta il timestamp per il PDF
+            timestamp_formatted = format_timestamp_for_display(riga['timestamp'])
             data.append([
-                riga['timestamp'],
+                timestamp_formatted,
                 str(riga['commessa_tx']),
                 str(riga['codice_cer_tx']),
                 str(riga['ore_totali_commessa_tx']),
@@ -254,12 +257,23 @@ def home():
         n = 10
     
     recenti = db.leggi_ultimi(n)
+    # Formatta i timestamp per la visualizzazione
+    for commessa in recenti:
+        if 'timestamp' in commessa:
+            commessa['timestamp_formatted'] = format_timestamp_for_display(commessa['timestamp'])
+    
     return template("index", commesse=recenti, num_records=n)
 
 @app.route('/report/giornaliero')
 def report_giornaliero():
     data = request.query.data or datetime.date.today().isoformat()
     commesse = db.report_giornaliero(data)
+    
+    # Formatta i timestamp per la visualizzazione
+    for commessa in commesse:
+        if 'timestamp' in commessa:
+            commessa['timestamp_formatted'] = format_timestamp_for_display(commessa['timestamp'])
+    
     return template("report", commesse=commesse, titolo=f"Report {data}")
 
 @app.route('/report/mensile')
@@ -268,6 +282,11 @@ def report_mensile():
     mese = int(request.query.mese or datetime.date.today().month)
     commesse = db.report_mensile(anno, mese)
     statistiche = db.statistiche_mensili(anno, mese)
+    
+    # Formatta i timestamp per la visualizzazione
+    for commessa in commesse:
+        if 'timestamp' in commessa:
+            commessa['timestamp_formatted'] = format_timestamp_for_display(commessa['timestamp'])
     
     # Nome del mese
     nomi_mesi = [
@@ -289,6 +308,11 @@ def report_annuale():
     anno = int(request.query.anno or datetime.date.today().year)
     commesse = db.report_annuale(anno)
     statistiche = db.statistiche_annuali(anno)
+    
+    # Formatta i timestamp per la visualizzazione
+    for commessa in commesse:
+        if 'timestamp' in commessa:
+            commessa['timestamp_formatted'] = format_timestamp_for_display(commessa['timestamp'])
     
     return template("report_annuale", 
                    commesse=commesse, 
@@ -318,7 +342,12 @@ def api_recenti():
         n = 5
     
     try:
-        return {"commesse": db.leggi_ultimi(n), "num_records": n}
+        commesse = db.leggi_ultimi(n)
+        # Formatta i timestamp per la visualizzazione
+        for commessa in commesse:
+            if 'timestamp' in commessa:
+                commessa['timestamp_formatted'] = format_timestamp_for_display(commessa['timestamp'])
+        return {"commesse": commesse, "num_records": n}
     except Exception as e:
         return {"error": f"Errore nel leggere i dati: {str(e)}"}
 
