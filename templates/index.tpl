@@ -383,6 +383,12 @@
                         document.getElementById('auto-increment').checked = data.config.auto_increment_commessa || false;
                         document.getElementById('auto-send').checked = data.config.auto_send_to_plc || false;
                         document.getElementById('system-mode').value = data.mode || 'opcua';
+                        
+                        // Aggiorna anche il CER nella dropdown principale
+                        const cerSelect = document.getElementById('cer');
+                        if (cerSelect && data.config.default_cer) {
+                            cerSelect.value = data.config.default_cer.toString();
+                        }
                     }
                     
                     // Stato del poller
@@ -475,6 +481,8 @@
                 if (data.success) {
                     alert('✅ Configurazione salvata con successo!');
                     document.getElementById('admin-password').value = '';
+                    // Aggiorna il CER di default nella dropdown principale
+                    setDefaultCer();
                 } else {
                     alert('❌ Errore: ' + (data.error || 'Errore sconosciuto'));
                 }
@@ -533,6 +541,24 @@
             .catch(error => {
                 console.error('Errore nel caricamento dell\'ultima commessa:', error);
             });
+
+        // Imposta il CER di default dalla configurazione
+        function setDefaultCer() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.config && data.config.default_cer) {
+                        const cerSelect = document.getElementById('cer');
+                        cerSelect.value = data.config.default_cer.toString();
+                    }
+                })
+                .catch(error => {
+                    console.error('Errore nel caricamento del CER di default:', error);
+                });
+        }
+
+        // Imposta il CER di default al caricamento della pagina
+        setDefaultCer();
     </script>
 </body>
 </html>
