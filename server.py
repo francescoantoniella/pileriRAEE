@@ -8,6 +8,7 @@ from data_provider import StandaloneDataProvider
 import time
 import threading
 from config import *
+from dynamic_config import load_config, save_config, get_config_value, set_config_value
 import io
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -28,19 +29,21 @@ poller_running = False
 
 def create_data_provider(mode=None):
     """Crea il provider di dati appropriato"""
+    config = load_config()
+    
     if mode is None:
-        mode = get_mode_from_env()
+        mode = config.get("mode", "opcua")
     
     print(f"Creazione provider per modalità: {mode}")
     
     if mode == "opcua":
         print("Tentativo di connessione OPC UA...")
         return OpcuaReader(
-            server_url=OPCUA_SERVER_URL,
+            server_url=config.get("opcua_server_url", OPCUA_SERVER_URL),
             tag_names=TAG_LIST,
             tag_check=TAG_CHECK,
-            namespace_index=OPCUA_NAMESPACE_INDEX,
-            tag_prefix=OPCUA_TAG_PREFIX,
+            namespace_index=config.get("opcua_namespace_index", OPCUA_NAMESPACE_INDEX),
+            tag_prefix=config.get("opcua_tag_prefix", OPCUA_TAG_PREFIX),
             on_change_callback=on_change,
             interval=POLLING_INTERVAL
         )
@@ -495,9 +498,15 @@ def imposta_commessa():
     data = request.json
     commessa_rx = data.get("commessa")
     cer_rx = data.get("cer")
+    
+    config = load_config()
+    
+    # Se non specificato, usa il CER di default
+    if cer_rx is None:
+        cer_rx = config.get("default_cer", 160214)
 
-    if commessa_rx is None or cer_rx is None:
-        return {"success": False, "error": "Campi 'commessa' e 'cer' obbligatori"}
+    if commessa_rx is None:
+        return {"success": False, "error": "Campo 'commessa' obbligatorio"}
 
     try:
         if poller and poller_running:
@@ -525,12 +534,80 @@ def ultima_commessa():
 @app.route('/api/status')
 def api_status():
     """Endpoint per verificare lo stato del sistema"""
+    config = load_config()
     return {
         "poller_running": poller_running,
         "poller_available": poller is not None,
-        "mode": get_mode_from_env(),
-        "database_available": True  # Il database è sempre disponibile
+        "mode": config.get("mode", "opcua"),
+        "database_available": True,  # Il database è sempre disponibile
+        "config": {
+            "opcua_server_url": config.get("opcua_server_url"),
+            "default_cer": config.get("default_cer", 160214),
+            "auto_increment_commessa": config.get("auto_increment_commessa", True),
+            "auto_send_to_plc": config.get("auto_send_to_plc", True)
+        }
     }
+
+@app.route('/api/config')
+def api_config():
+    """Endpoint per ottenere la configurazione"""
+    return load_config()
+
+@app.post('/api/config/update')
+def api_config_update():
+    """Endpoint per aggiornare la configurazione"""
+    try:
+        data = request.json
+        if not data:
+            return {"success": False, "error": "Dati mancanti"}
+        
+        # Validazione password (da file)
+        password = data.get("password")
+        admin_password = "admin123"  # Default
+        
+        # Prova a leggere da file
+        try:
+            with open("admin_password.txt", "r") as f:
+                admin_password = f.read().strip()
+        except:
+            pass  # Usa il default se il file non esiste
+        
+        if password != admin_password:
+            return {"success": False, "error": "Password non valida"}
+        
+        # Rimuovi la password dai dati da salvare
+        config_data = {k: v for k, v in data.items() if k != "password"}
+        
+        success = save_config(config_data)
+        return {"success": success, "message": "Configurazione aggiornata" if success else "Errore nel salvataggio"}
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post('/api/config/reset')
+def api_config_reset():
+    """Reset della configurazione ai valori di default"""
+    try:
+        data = request.json
+        password = data.get("password")
+        admin_password = "admin123"  # Default
+        
+        # Prova a leggere da file
+        try:
+            with open("admin_password.txt", "r") as f:
+                admin_password = f.read().strip()
+        except:
+            pass  # Usa il default se il file non esiste
+        
+        if password != admin_password:
+            return {"success": False, "error": "Password non valida"}
+        
+        from dynamic_config import DEFAULT_CONFIG
+        success = save_config(DEFAULT_CONFIG)
+        return {"success": success, "message": "Configurazione resettata" if success else "Errore nel reset"}
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.post('/api/poller/restart')
 def restart_poller():
@@ -575,9 +652,11 @@ def start_poller_api():
 # TODO: api/report_mensile, api/report_annuale ...
 
 def on_change(new_values, old_values):
+    config = load_config()
     status = ""
     crx=new_values["Commessa RX"]
     ctx=new_values["Commessa TX"]
+    
     if crx==ctx:
         status = "In registrazione"
     elif crx!=0 and ctx==0:
@@ -585,8 +664,32 @@ def on_change(new_values, old_values):
     elif crx==0 and ctx!=0:
         status = f"Dati registrati\n{new_values}\n"
         db.insert_record(new_values)
+        
+        # Auto-increment e invio automatico al PLC
+        if config.get("auto_increment_commessa", True):
+            try:
+                # Ottieni l'ultima commessa
+                ultimi = db.leggi_ultimi(1)
+                if ultimi:
+                    ultima_commessa = ultimi[0].get('commessa_tx', 0)
+                    nuova_commessa = ultima_commessa + 1
+                    default_cer = config.get("default_cer", 160214)
+                    
+                    print(f"Auto-increment commessa: {nuova_commessa}")
+                    
+                    # Invia automaticamente al PLC se abilitato
+                    if config.get("auto_send_to_plc", True) and poller and poller_running:
+                        success = poller.write_tags(nuova_commessa, default_cer)
+                        if success:
+                            print(f"✅ Commessa {nuova_commessa} inviata automaticamente al PLC")
+                        else:
+                            print(f"❌ Errore nell'invio automatico della commessa {nuova_commessa}")
+                    
+            except Exception as e:
+                print(f"Errore nell'auto-increment: {e}")
     else:
         status = "In preparazione"
+    
     print(f'{new_values["timestamp"]} RX: {crx}  TX: {ctx} Stato: {status}')
 
 def run_server_only():

@@ -228,6 +228,84 @@
                 </div>
             </div>
         </div>
+
+        <!-- Pannello Configurazione - Collassabile -->
+        <div class="status-card">
+            <h4 class="collapsible" onclick="toggleSection('configSection')">
+                🔧 Configurazione Sistema <span id="configArrow">▶</span> <span class="badge bg-warning">Admin</span>
+            </h4>
+            <div id="configSection" class="collapsible-content">
+                <div class="alert alert-warning">
+                    <strong>⚠️ Attenzione:</strong> Questa sezione è riservata agli amministratori.
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>🔗 Configurazione OPC UA</h5>
+                        <form id="config-form">
+                            <div class="mb-3">
+                                <label for="opcua-url" class="form-label">URL Server OPC UA:</label>
+                                <input type="text" class="form-control" id="opcua-url" placeholder="opc.tcp://192.168.1.2:4840">
+                            </div>
+                            <div class="mb-3">
+                                <label for="opcua-namespace" class="form-label">Namespace Index:</label>
+                                <input type="number" class="form-control" id="opcua-namespace" value="2">
+                            </div>
+                            <div class="mb-3">
+                                <label for="opcua-prefix" class="form-label">Tag Prefix:</label>
+                                <input type="text" class="form-control" id="opcua-prefix" placeholder="Siemens S7-1200/S7-1500.Tags.">
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h5>🎯 Configurazione Comportamento</h5>
+                        <form id="behavior-form">
+                            <div class="mb-3">
+                                <label for="default-cer" class="form-label">CER di Default:</label>
+                                <input type="number" class="form-control" id="default-cer" value="160214">
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="auto-increment" checked>
+                                    <label class="form-check-label" for="auto-increment">
+                                        Auto-increment Commessa
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="auto-send" checked>
+                                    <label class="form-check-label" for="auto-send">
+                                        Invio Automatico al PLC
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="system-mode" class="form-label">Modalità Sistema:</label>
+                                <select class="form-control" id="system-mode">
+                                    <option value="opcua">OPC UA</option>
+                                    <option value="standalone">Standalone</option>
+                                </select>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <!-- Password nascosta per sicurezza -->
+                        <div class="mb-3">
+                            <label for="admin-password" class="form-label">Password:</label>
+                            <input type="password" class="form-control" id="admin-password" placeholder="Inserisci password">
+                        </div>
+                        <button class="btn btn-primary" onclick="saveConfig()">💾 Salva Configurazione</button>
+                        <button class="btn btn-secondary" onclick="resetConfig()">🔄 Reset Configurazione</button>
+                        <button class="btn btn-warning" onclick="restartPoller()">🔄 Riavvia Poller</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -298,6 +376,15 @@
                     const statusDiv = document.getElementById('system-status');
                     let statusHtml = '';
                     
+                    // Aggiorna anche la configurazione se disponibile
+                    if (data.config) {
+                        document.getElementById('opcua-url').value = data.config.opcua_server_url || '';
+                        document.getElementById('default-cer').value = data.config.default_cer || 160214;
+                        document.getElementById('auto-increment').checked = data.config.auto_increment_commessa || false;
+                        document.getElementById('auto-send').checked = data.config.auto_send_to_plc || false;
+                        document.getElementById('system-mode').value = data.mode || 'opcua';
+                    }
+                    
                     // Stato del poller
                     const pollerStatus = data.poller_running ? 'status-online' : 'status-offline';
                     const pollerText = data.poller_running ? 'Online' : 'Offline';
@@ -355,6 +442,80 @@
                 .catch(error => {
                     alert('Errore nella fermata del poller');
                 });
+        }
+
+        // Funzione per salvare la configurazione
+        function saveConfig() {
+            const password = document.getElementById('admin-password').value;
+            if (!password) {
+                alert('Inserisci la password amministratore');
+                return;
+            }
+            
+            const config = {
+                password: password,
+                opcua_server_url: document.getElementById('opcua-url').value,
+                opcua_namespace_index: parseInt(document.getElementById('opcua-namespace').value),
+                opcua_tag_prefix: document.getElementById('opcua-prefix').value,
+                default_cer: parseInt(document.getElementById('default-cer').value),
+                auto_increment_commessa: document.getElementById('auto-increment').checked,
+                auto_send_to_plc: document.getElementById('auto-send').checked,
+                mode: document.getElementById('system-mode').value
+            };
+            
+            fetch('/api/config/update', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(config)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ Configurazione salvata con successo!');
+                    document.getElementById('admin-password').value = '';
+                } else {
+                    alert('❌ Errore: ' + (data.error || 'Errore sconosciuto'));
+                }
+            })
+            .catch(error => {
+                alert('❌ Errore di connessione');
+            });
+        }
+
+        // Funzione per resettare la configurazione
+        function resetConfig() {
+            const password = document.getElementById('admin-password').value;
+            if (!password) {
+                alert('Inserisci la password amministratore');
+                return;
+            }
+            
+            if (!confirm('Sei sicuro di voler resettare la configurazione ai valori di default?')) {
+                return;
+            }
+            
+            fetch('/api/config/reset', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ password: password })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ Configurazione resettata con successo!');
+                    document.getElementById('admin-password').value = '';
+                    updateStatus(); // Ricarica la configurazione
+                } else {
+                    alert('❌ Errore: ' + (data.error || 'Errore sconosciuto'));
+                }
+            })
+            .catch(error => {
+                alert('❌ Errore di connessione');
+            });
         }
 
         // Inizializzazione
