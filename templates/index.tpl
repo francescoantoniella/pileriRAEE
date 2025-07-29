@@ -103,7 +103,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>OPC Logger - Dashboard</h1>
+        <h1>Impianto trattamento RAEE - Dashboard</h1>
         
         <!-- Sezione Commessa - Sempre visibile -->
         <div class="commessa-form">

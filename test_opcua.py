@@ -35,7 +35,7 @@ def test_opcua_connection():
         # Prova a leggere i dati
         print("📖 Lettura dati...")
         for i in range(3):
-            data = reader.read_one()
+            data = reader.read_once()
             print(f"   Lettura {i+1}: {data}")
             time.sleep(1)
         

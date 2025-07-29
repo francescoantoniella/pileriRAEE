@@ -31,6 +31,8 @@ def create_data_provider(mode=None):
     if mode is None:
         mode = get_mode_from_env()
     
+    print(f"Creazione provider per modalità: {mode}")
+    
     if mode == "opcua":
         print("Tentativo di connessione OPC UA...")
         return OpcuaReader(
@@ -55,6 +57,11 @@ def start_poller_in_background(mode=None, max_retries=None, retry_delay=None):
     """Avvia il poller in un thread separato con retry automatico"""
     global poller, poller_thread, poller_running
     
+    print(f"Avvio poller in background, modalità: {mode}")
+    
+    # Imposta poller_running a True per permettere l'avvio
+    poller_running = True
+    
     # Usa i valori di default se non specificati
     if max_retries is None:
         max_retries = POLLER_MAX_RETRIES
@@ -65,19 +72,28 @@ def start_poller_in_background(mode=None, max_retries=None, retry_delay=None):
         global poller_running
         retry_count = 0
         
+        print("🔄 Poller worker avviato")
+        print(f"poller_running: {poller_running}")
+        print(f"max_retries: {max_retries}")
+        
         while poller_running and retry_count < max_retries:
             try:
+                print(f"Tentativo di connessione (tentativo {retry_count + 1})...")
                 poller.connect()
+                print("Connessione riuscita, avvio polling...")
                 poller.start_polling()
                 poller_running = True
                 print(f"Provider di dati avviato (tentativo {retry_count + 1})")
                 
                 # Mantieni il thread attivo
                 while poller_running:
+                    print("🔄 Poller worker in esecuzione")
                     time.sleep(1)
                     
             except Exception as e:
                 print(f"Errore nel provider di dati (tentativo {retry_count + 1}): {e}")
+                import traceback
+                traceback.print_exc()
                 poller_running = False
                 retry_count += 1
                 
@@ -89,13 +105,34 @@ def start_poller_in_background(mode=None, max_retries=None, retry_delay=None):
                     break
     
     try:
+        print("Creazione provider di dati...")
         poller = create_data_provider(mode)
+        print("Provider creato, avvio thread...")
         poller_thread = threading.Thread(target=poller_worker, daemon=True)
         poller_thread.start()
+        print("Thread avviato con successo")
         return True
     except Exception as e:
         print(f"Errore nell'avvio del provider di dati: {e}")
+        import traceback
+        traceback.print_exc()
         return False
+
+def stop_poller():
+    """Ferma il poller"""
+    global poller_running, poller, poller_thread
+    
+    poller_running = False
+    
+    if poller:
+        try:
+            poller.stop_polling()
+            poller.disconnect()
+        except Exception as e:
+            print(f"Errore nella disconnessione del poller: {e}")
+    
+    if poller_thread and poller_thread.is_alive():
+        poller_thread.join(timeout=5)
 
 def generate_pdf_report(commesse, titolo, tipo_report, statistiche=None):
     """Genera un PDF del report"""
