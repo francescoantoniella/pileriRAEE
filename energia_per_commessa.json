@@ -1,0 +1,190 @@
+{
+  "12345": {
+    "energia_totale": 15679,
+    "descrizione": null,
+    "ultimo_timestamp": "2025-09-10T14:43:09.525035Z",
+    "record_count": 1,
+    "record_details": [
+      {
+        "timestamp": "2025-09-10T14:43:09.525035Z",
+        "energia": 15679,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 0
+      }
+    ]
+  },
+  "100018": {
+    "energia_totale": 15676,
+    "descrizione": null,
+    "ultimo_timestamp": "2025-09-10T14:20:15.900670Z",
+    "record_count": 1,
+    "record_details": [
+      {
+        "timestamp": "2025-09-10T14:20:15.900670Z",
+        "energia": 15676,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 0
+      }
+    ]
+  },
+  "100017": {
+    "energia_totale": 0,
+    "descrizione": null,
+    "ultimo_timestamp": "2025-08-25T11:37:34.414731Z",
+    "record_count": 1,
+    "record_details": [
+      {
+        "timestamp": "2025-08-25T11:37:34.414731Z",
+        "energia": 0,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 12
+      }
+    ]
+  },
+  "100015": {
+    "energia_totale": 0,
+    "descrizione": null,
+    "ultimo_timestamp": "2025-08-20T15:48:27.632570Z",
+    "record_count": 1,
+    "record_details": [
+      {
+        "timestamp": "2025-08-20T15:48:27.632570Z",
+        "energia": 0,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 0
+      }
+    ]
+  },
+  "100014": {
+    "energia_totale": 0,
+    "descrizione": null,
+    "ultimo_timestamp": "2025-08-20T15:44:39.124530Z",
+    "record_count": 1,
+    "record_details": [
+      {
+        "timestamp": "2025-08-20T15:44:39.124530Z",
+        "energia": 0,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 0
+      }
+    ]
+  },
+  "100013": {
+    "energia_totale": 0,
+    "descrizione": null,
+    "ultimo_timestamp": "2025-08-20T15:39:02.657820Z",
+    "record_count": 1,
+    "record_details": [
+      {
+        "timestamp": "2025-08-20T15:39:02.657820Z",
+        "energia": 0,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 0
+      }
+    ]
+  },
+  "100009": {
+    "energia_totale": 0,
+    "descrizione": null,
+    "ultimo_timestamp": "2025-08-20T15:35:59.794786Z",
+    "record_count": 1,
+    "record_details": [
+      {
+        "timestamp": "2025-08-20T15:35:59.794786Z",
+        "energia": 0,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 0
+      }
+    ]
+  },
+  "100008": {
+    "energia_totale": 0,
+    "descrizione": null,
+    "ultimo_timestamp": "2025-08-20T15:35:15.037100Z",
+    "record_count": 1,
+    "record_details": [
+      {
+        "timestamp": "2025-08-20T15:35:15.037100Z",
+        "energia": 0,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 0
+      }
+    ]
+  },
+  "100006": {
+    "energia_totale": 1,
+    "descrizione": null,
+    "ultimo_timestamp": "2025-07-29T13:15:51.035795Z",
+    "record_count": 1,
+    "record_details": [
+      {
+        "timestamp": "2025-07-29T13:15:51.035795Z",
+        "energia": 1,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 14
+      }
+    ]
+  },
+  "100005": {
+    "energia_totale": 0,
+    "descrizione": null,
+    "ultimo_timestamp": "2025-07-25T13:54:46.563949Z",
+    "record_count": 1,
+    "record_details": [
+      {
+        "timestamp": "2025-07-25T13:54:46.563949Z",
+        "energia": 0,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 0
+      }
+    ]
+  },
+  "100004": {
+    "energia_totale": 0,
+    "descrizione": null,
+    "ultimo_timestamp": "2025-07-25T13:53:45.559785Z",
+    "record_count": 2,
+    "record_details": [
+      {
+        "timestamp": "2025-07-25T13:53:45.559785Z",
+        "energia": 0,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 0
+      },
+      {
+        "timestamp": "2025-07-25T13:52:16.356874Z",
+        "energia": 0,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 0
+      }
+    ]
+  },
+  "100003": {
+    "energia_totale": 0,
+    "descrizione": null,
+    "ultimo_timestamp": "2025-07-25T13:50:53.814480Z",
+    "record_count": 1,
+    "record_details": [
+      {
+        "timestamp": "2025-07-25T13:50:53.814480Z",
+        "energia": 0,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 0
+      }
+    ]
+  },
+  "100002": {
+    "energia_totale": 0,
+    "descrizione": null,
+    "ultimo_timestamp": "2025-07-25T13:50:18.300391Z",
+    "record_count": 1,
+    "record_details": [
+      {
+        "timestamp": "2025-07-25T13:50:18.300391Z",
+        "energia": 0,
+        "ore_lavorate": 0,
+        "minuti_lavorati": 0
+      }
+    ]
+  }
+}

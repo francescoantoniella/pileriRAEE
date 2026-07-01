@@ -1,22 +1,23 @@
-from bottle import Bottle, run, template, static_file, request, TEMPLATE_PATH
+from bottle import Bottle, run, template, static_file, request, response, TEMPLATE_PATH
 from db import TelemetriaDB
+import csv
 import datetime
+import io
 import os
 import sys
-from opcua_reader import OpcuaReader
-from data_provider import StandaloneDataProvider
 import time
 import threading
+from opcua_reader import OpcuaReader
+from data_provider import StandaloneDataProvider
 from config import *
 from dynamic_config import load_config, save_config, get_config_value, set_config_value
 from utils import format_timestamp_for_display
-import io
-from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER
 
 TEMPLATE_PATH.append(os.path.abspath("./templates"))
 
@@ -27,6 +28,35 @@ db = TelemetriaDB(DATABASE_PATH)
 poller = None
 poller_thread = None
 poller_running = False
+
+def datalog(data):
+    # Ottiene la data odierna nel formato ANNO-MESE-GIORNO
+    data_oggi = datetime.datetime.now().strftime("%Y-%m-%d")
+    # Crea il nome del file dinamicamente
+    file_path = f"data_{data_oggi}.log"
+
+    # Definiamo l'ordine dei campi (le chiavi del dizionario)
+    fieldnames = [
+        'timestamp', 'Commessa RX', 'Codice CER RX', 'Codice CER TX', 
+        'Commessa TX', 'Ore totali commessa TX', 'Minuti totali commessa TX', 
+        'Ore lavorate commessa TX', 'Minuti lavorati commessa TX', 'Potenza consumata TX'
+    ]
+    
+    # Controlliamo se il file esiste già e se ha una dimensione > 0
+    file_exists = os.path.isfile(file_path) and os.path.getsize(file_path) > 0
+
+    with open(file_path, mode='a', newline='', encoding='utf-8') as file:
+        # DictWriter usa le chiavi del dizionario per scrivere nelle colonne giuste
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+
+        # Se il file è vuoto o non esiste, scrive l'intestazione
+        if not file_exists:
+            writer.writeheader()
+        
+        # Scrive la riga con i dati del dizionario
+        writer.writerow(data)
+
+
 
 def create_data_provider(mode=None):
     """Crea il provider di dati appropriato"""
@@ -46,6 +76,7 @@ def create_data_provider(mode=None):
             namespace_index=config.get("opcua_namespace_index", OPCUA_NAMESPACE_INDEX),
             tag_prefix=config.get("opcua_tag_prefix", OPCUA_TAG_PREFIX),
             on_change_callback=on_change,
+            on_read_callback=datalog,
             interval=POLLING_INTERVAL
         )
     else:
@@ -82,31 +113,20 @@ def start_poller_in_background(mode=None, max_retries=None, retry_delay=None):
         
         while poller_running and retry_count < max_retries:
             try:
-                print(f"Tentativo di connessione (tentativo {retry_count + 1})...")
-                poller.connect()
-                print("Connessione riuscita, avvio polling...")
+                retry_count = 0
                 poller.start_polling()
                 poller_running = True
                 print(f"Provider di dati avviato (tentativo {retry_count + 1})")
-                
-                # Mantieni il thread attivo
                 while poller_running:
-                    print("🔄 Poller worker in esecuzione")
                     time.sleep(1)
-                    
             except Exception as e:
                 print(f"Errore nel provider di dati (tentativo {retry_count + 1}): {e}")
                 import traceback
                 traceback.print_exc()
-                poller_running = False
                 retry_count += 1
                 
-                if retry_count < max_retries:
-                    print(f"Riprovo tra {retry_delay} secondi...")
-                    time.sleep(retry_delay)
-                else:
-                    print("Numero massimo di tentativi raggiunto, poller fermato")
-                    break
+                print(f"Riprovo tra {retry_delay} secondi...")
+                time.sleep(retry_delay)
     
     try:
         print("Creazione provider di dati...")
@@ -131,7 +151,6 @@ def stop_poller():
     if poller:
         try:
             poller.stop_polling()
-            poller.disconnect()
         except Exception as e:
             print(f"Errore nella disconnessione del poller: {e}")
     
@@ -189,7 +208,7 @@ def generate_pdf_report(commesse, titolo, tipo_report, statistiche=None):
     # Tabella dati
     if commesse:
         # Header
-        headers = ['Ora Chiusura', 'Commessa', 'CER', 'Ore Totali', 'Minuti Totali', 
+        headers = ['Ora Chiusura', 'Commessa', 'CER', 'Descrizione', 'Ore Totali', 'Minuti Totali', 
                   'Ore Lavorate', 'Minuti Lavorati', 'Energia (kWh)']
         
         # Dati
@@ -201,6 +220,7 @@ def generate_pdf_report(commesse, titolo, tipo_report, statistiche=None):
                 timestamp_formatted,
                 str(riga['commessa_tx']),
                 str(riga['codice_cer_tx']),
+                str(riga.get('descrizione_commessa', '')),
                 str(riga['ore_totali_commessa_tx']),
                 str(riga['minuti_totali_commessa_tx']),
                 str(riga['ore_lavorate_commessa_tx']),
@@ -209,8 +229,8 @@ def generate_pdf_report(commesse, titolo, tipo_report, statistiche=None):
             ])
         
         # Crea tabella
-        table = Table(data, colWidths=[1.2*inch, 0.8*inch, 0.8*inch, 0.8*inch, 
-                                      0.8*inch, 0.8*inch, 0.8*inch, 0.8*inch])
+        table = Table(data, colWidths=[1.2*inch, 0.8*inch, 0.8*inch, 1.2*inch, 
+                                      0.8*inch, 0.8*inch, 0.8*inch, 0.8*inch, 0.8*inch])
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -239,30 +259,83 @@ def generate_pdf_report(commesse, titolo, tipo_report, statistiche=None):
     buffer.seek(0)
     return buffer
 
+def generate_energy_pdf_report(report_data, titolo):
+    """Genera PDF per report energetici (settimanale/mensile/annuale)"""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    story = []
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'EnergyTitle', parent=styles['Heading1'], fontSize=16, spaceAfter=20, alignment=TA_CENTER
+    )
+
+    story.append(Paragraph(titolo, title_style))
+    story.append(Spacer(1, 12))
+
+    # Tabella statistiche principali
+    stats_data = [
+        ['Metrica', 'Valore'],
+        ['Energia Totale (kWh)', f"{report_data.get('energia_totale_kwh', 0):.3f}"],
+        ['Energia Lavorazioni (kWh)', f"{report_data.get('energia_lavorazioni_kwh', 0):.3f}"],
+        ['Energia Standby (kWh)', f"{report_data.get('energia_standby_kwh', 0):.3f}"],
+        ['Commesse Completate', str(report_data.get('commesse_completate', 0))],
+        ['Prima Lettura (Wh)', str(report_data.get('prima_lettura_wh', 0))],
+        ['Ultima Lettura (Wh)', str(report_data.get('ultima_lettura_wh', 0))],
+        ['Totale Letture', str(report_data.get('totale_letture', 0))],
+    ]
+
+    stats_table = Table(stats_data, colWidths=[2.5*inch, 2*inch])
+    stats_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+
+    story.append(stats_table)
+    story.append(Spacer(1, 16))
+
+    # Dettaglio commesse (se presente)
+    commesse = report_data.get('commesse_dettaglio') or []
+    if commesse:
+        headers = ['Timestamp', 'Commessa', 'Energia (Wh)', 'Energia (kWh)', 'Descrizione']
+        data = [headers]
+        for c in commesse:
+            energia_wh = c.get('energia_consumata_wh', 0)
+            data.append([
+                str(c.get('timestamp', '')),
+                str(c.get('commessa_tx', '')),
+                str(energia_wh),
+                f"{energia_wh/RAW_TO_KWH:.3f}",
+                str(c.get('descrizione_commessa', ''))
+            ])
+
+        table = Table(data, colWidths=[1.5*inch, 0.9*inch, 1.1*inch, 1.1*inch, 2.3*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+
+        story.append(Paragraph('Dettaglio Commesse', styles['Heading2']))
+        story.append(table)
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
 @app.route('/')
 def home():
-    # Permette di specificare il numero di record tramite parametro URL
-    n = request.query.n
-    if n is not None:
-        try:
-            n = int(n)
-            # Limita il numero massimo per evitare sovraccarichi
-            if n > 100:
-                n = 100
-            elif n < 1:
-                n = 10
-        except ValueError:
-            n = 10
-    else:
-        n = 10
-    
-    recenti = db.leggi_ultimi(n)
-    # Formatta i timestamp per la visualizzazione
-    for commessa in recenti:
-        if 'timestamp' in commessa:
-            commessa['timestamp_formatted'] = format_timestamp_for_display(commessa['timestamp'])
-    
-    return template("index", commesse=recenti, num_records=n)
+    """Serve il frontend statico Angular.js"""
+    return static_file('index.html', root='./static')
 
 @app.route('/report/giornaliero')
 def report_giornaliero():
@@ -326,28 +399,16 @@ def serve_static(filename):
 
 @app.route('/api/commesse/recenti')
 def api_recenti():
-    """API per le commesse recenti con controllo del numero di record"""
-    n = request.query.n
-    if n is not None:
-        try:
-            n = int(n)
-            # Limita il numero massimo per evitare sovraccarichi
-            if n > 100:
-                n = 100
-            elif n < 1:
-                n = 5
-        except ValueError:
-            n = 5
-    else:
-        n = 5
-    
+    """API per tutte le commesse con stato"""
     try:
-        commesse = db.leggi_ultimi(n)
-        # Formatta i timestamp per la visualizzazione
+        commesse = db.leggi_tutti_con_stato(1000)
         for commessa in commesse:
             if 'timestamp' in commessa:
                 commessa['timestamp_formatted'] = format_timestamp_for_display(commessa['timestamp'])
-        return {"commesse": commesse, "num_records": n}
+            wh = commessa.get('energia_consumata_wh', 0) or 0
+            commessa['energia_calcolata_kwh'] = round(wh / RAW_TO_KWH, 3)
+            commessa['progressivo_wh'] = commessa.get('potenza_consumata_tx', 0)
+        return {"commesse": commesse, "num_records": len(commesse)}
     except Exception as e:
         return {"error": f"Errore nel leggere i dati: {str(e)}"}
 
@@ -418,10 +479,6 @@ def export_csv():
         if not commesse:
             return {"error": "Nessun dato da esportare"}
         
-        # Crea il CSV
-        import csv
-        import io
-        
         output = io.StringIO()
         writer = csv.writer(output)
         
@@ -436,7 +493,6 @@ def export_csv():
         csv_content = output.getvalue()
         output.close()
         
-        from bottle import response
         response.content_type = 'text/csv'
         response.headers['Content-Disposition'] = 'attachment; filename="telemetria.csv"'
         
@@ -458,7 +514,6 @@ def export_pdf_giornaliero():
             tipo_report="giornaliero"
         )
         
-        from bottle import response
         response.content_type = 'application/pdf'
         response.headers['Content-Disposition'] = f'attachment; filename="report_giornaliero_{data}.pdf"'
         
@@ -489,7 +544,6 @@ def export_pdf_mensile():
             statistiche=statistiche
         )
         
-        from bottle import response
         response.content_type = 'application/pdf'
         response.headers['Content-Disposition'] = f'attachment; filename="report_mensile_{anno}_{mese:02d}.pdf"'
         
@@ -513,7 +567,6 @@ def export_pdf_annuale():
             statistiche=statistiche
         )
         
-        from bottle import response
         response.content_type = 'application/pdf'
         response.headers['Content-Disposition'] = f'attachment; filename="report_annuale_{anno}.pdf"'
         
@@ -522,11 +575,55 @@ def export_pdf_annuale():
     except Exception as e:
         return {"error": f"Errore nell'esportazione PDF: {str(e)}"}
 
+@app.route('/api/export/pdf/energia/mensile')
+def export_pdf_energia_mensile():
+    try:
+        anno = int(request.query.anno or datetime.date.today().year)
+        mese = int(request.query.mese or datetime.date.today().month)
+        report = db.calcola_report_mensile(anno, mese)
+        nomi_mesi = [
+            "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+            "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
+        ]
+        nome_mese = nomi_mesi[mese - 1]
+        pdf_buffer = generate_energy_pdf_report(report, f"Report Energia Mensile - {nome_mese} {anno}")
+        response.content_type = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="report_energia_mensile_{anno}_{mese:02d}.pdf"'
+        return pdf_buffer.getvalue()
+    except Exception as e:
+        return {"error": f"Errore nell'esportazione PDF energia: {str(e)}"}
+
+@app.route('/api/export/pdf/energia/annuale')
+def export_pdf_energia_annuale():
+    try:
+        anno = int(request.query.anno or datetime.date.today().year)
+        report = db.calcola_report_annuale(anno)
+        pdf_buffer = generate_energy_pdf_report(report, f"Report Energia Annuale - {anno}")
+        response.content_type = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="report_energia_annuale_{anno}.pdf"'
+        return pdf_buffer.getvalue()
+    except Exception as e:
+        return {"error": f"Errore nell'esportazione PDF energia: {str(e)}"}
+
+@app.route('/api/export/pdf/energia/settimanale')
+def export_pdf_energia_settimanale():
+    try:
+        inizio = request.query.inizio or (datetime.date.today() - datetime.timedelta(days=6)).isoformat()
+        fine = request.query.fine or datetime.date.today().isoformat()
+        report = db.calcola_report_settimanale(inizio, fine)
+        pdf_buffer = generate_energy_pdf_report(report, f"Report Energia Settimanale - {inizio} → {fine}")
+        response.content_type = 'application/pdf'
+        response.headers['Content-Disposition'] = 'attachment; filename="report_energia_settimanale.pdf"'
+        return pdf_buffer.getvalue()
+    except Exception as e:
+        return {"error": f"Errore nell'esportazione PDF energia: {str(e)}"}
+
 @app.post('/api/commessa/imposta')
 def imposta_commessa():
     data = request.json
     commessa_rx = data.get("commessa")
     cer_rx = data.get("cer")
+    descrizione = data.get("descrizione", "")
     
     config = load_config()
     
@@ -537,12 +634,45 @@ def imposta_commessa():
     if commessa_rx is None:
         return {"success": False, "error": "Campo 'commessa' obbligatorio"}
 
+    # Invia i dati al PLC
+    if poller and poller_running:
+        success = poller.write_tags(commessa_rx, cer_rx)
+        if not success:
+            return {"success": False, "error": "Errore nell'invio al PLC"}
+    else:
+        return {"success": False, "error": "Provider di dati non disponibile"}
+
     try:
-        if poller and poller_running:
-            success = poller.write_tags(commessa_rx, cer_rx)
-            return {"success": success}
-        else:
-            return {"success": False, "error": "Provider di dati non disponibile"}
+        try:
+            if db.commessa_esiste(commessa_rx):
+                # Commessa già presente: aggiorna solo descrizione e CER se forniti
+                if descrizione.strip():
+                    db.aggiorna_descrizione_commessa(commessa_rx, descrizione.strip())
+                print(f"Commessa {commessa_rx} già presente, aggiornata descrizione")
+            else:
+                timestamp = datetime.datetime.now().isoformat()
+                record_data = {
+                    'timestamp': timestamp,
+                    'Commessa RX': commessa_rx,
+                    'Codice CER RX': cer_rx,
+                    'Codice CER TX': cer_rx,
+                    'Commessa TX': commessa_rx,
+                    'Ore totali commessa TX': 0,
+                    'Minuti totali commessa TX': 0,
+                    'Ore lavorate commessa TX': 0,
+                    'Minuti lavorati commessa TX': 0,
+                    'Potenza consumata TX': 0,
+                    'Descrizione commessa': descrizione.strip(),
+                    'stato_lavorazione': 'non_iniziata'
+                }
+                db.insert_record(record_data)
+                print(f"Record creato per commessa {commessa_rx} impostata manualmente")
+
+        except Exception as db_error:
+            print(f"Errore nella registrazione del record: {db_error}")
+
+        return {"success": True, "message": f"Commessa {commessa_rx} impostata con successo"}
+        
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -559,6 +689,215 @@ def ultima_commessa():
             return {"ultima_commessa": 0}
     except Exception as e:
         return {"error": f"Errore nel leggere l'ultima commessa: {str(e)}"}
+
+@app.post('/api/commessa/descrizione')
+def aggiorna_descrizione_commessa():
+    """Aggiorna la descrizione di una commessa specifica"""
+    data = request.json
+    commessa_tx = data.get("commessa")
+    descrizione = data.get("descrizione", "")
+    
+    if commessa_tx is None:
+        return {"success": False, "error": "Campo 'commessa' obbligatorio"}
+    
+    try:
+        success = db.aggiorna_descrizione_commessa(commessa_tx, descrizione)
+        if success:
+            return {"success": True, "message": f"Descrizione aggiornata per commessa {commessa_tx}"}
+        else:
+            return {"success": False, "error": f"Commessa {commessa_tx} non trovata"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.route('/api/commessa/energia/<commessa_tx>')
+def calcola_energia_commessa(commessa_tx):
+    """Calcola l'energia consumata per una commessa specifica"""
+    try:
+        commessa_tx = int(commessa_tx)
+        energia_data = db.calcola_energia_commessa(commessa_tx)
+        
+        if energia_data is None:
+            return {"success": False, "error": "Commessa non trovata"}
+        
+        return {
+            "success": True,
+            "commessa_tx": commessa_tx,
+            "energia_consumata_wh": energia_data['energia_consumata_wh'],
+            "energia_consumata_kwh": round(energia_data['energia_consumata_kwh'], 3),
+            "energia_iniziale_wh": energia_data['energia_iniziale_wh'],
+            "energia_finale_wh": energia_data['energia_finale_wh'],
+            "progressivo_finale": energia_data['progressivo_finale'],
+            "timestamp": energia_data['timestamp'],
+            "descrizione": energia_data['descrizione'],
+            "stato_lavorazione": energia_data['stato_lavorazione']
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/api/report/giornaliero/<data>')
+def report_giornaliero(data):
+    """Genera il report energetico giornaliero"""
+    try:
+        # Accetta formati multipli e normalizza a YYYY-MM-DD
+        from datetime import datetime
+        data = data.strip()
+        formati = ['%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%Y/%m/%d']
+        parsed = None
+        for fmt in formati:
+            try:
+                parsed = datetime.strptime(data, fmt)
+                break
+            except ValueError:
+                continue
+        if not parsed:
+            return {"success": False, "error": "Formato data non valido. Usa YYYY-MM-DD"}
+        data_norm = parsed.strftime('%Y-%m-%d')
+
+        report = db.calcola_report_giornaliero(data_norm)
+        
+        return {
+            "success": True,
+            "report": report
+        }
+        
+    except ValueError:
+        return {"success": False, "error": "Formato data non valido. Usa YYYY-MM-DD"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/api/report/oggi')
+def report_oggi():
+    """Genera il report energetico per oggi"""
+    try:
+        from datetime import datetime, date
+        oggi = date.today().strftime('%Y-%m-%d')
+        
+        report = db.calcola_report_giornaliero(oggi)
+        
+        return {
+            "success": True,
+            "report": report
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/api/commesse/energia/tutte')
+def calcola_energia_tutte_commesse():
+    """Calcola l'energia consumata per tutte le commesse"""
+    try:
+        commesse_energia = db.calcola_energia_tutte_commesse()
+        
+        # Calcola statistiche
+        totale_energia_wh = sum(c['energia_consumata_wh'] for c in commesse_energia)
+        totale_energia_kwh = totale_energia_wh / RAW_TO_KWH
+        energia_media_kwh = totale_energia_kwh / len(commesse_energia) if commesse_energia else 0
+        
+        return {
+            "success": True,
+            "commesse": commesse_energia,
+            "statistiche": {
+                "totale_commesse": len(commesse_energia),
+                "energia_totale_wh": totale_energia_wh,
+                "energia_totale_kwh": round(totale_energia_kwh, 3),
+                "energia_media_kwh": round(energia_media_kwh, 3)
+            }
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/api/energia/statistiche')
+def api_statistiche_energia():
+    """API per le statistiche dell'energia di tutte le commesse"""
+    try:
+        commesse = db.calcola_energia_tutte_commesse()
+        if not commesse:
+            return {"success": True, "statistiche": {
+                "totale_commesse": 0, "energia_totale_kwh": 0,
+                "energia_media_kwh": 0, "progressivo_massimo_wh": 0
+            }}
+        energia_totale_wh = sum(c['energia_consumata_wh'] for c in commesse)
+        progressivo_massimo = max(c['progressivo_finale'] for c in commesse)
+        energia_totale_kwh = energia_totale_wh / RAW_TO_KWH
+        return {
+            "success": True,
+            "statistiche": {
+                "totale_commesse": len(commesse),
+                "energia_totale_kwh": round(energia_totale_kwh, 3),
+                "energia_media_kwh": round(energia_totale_kwh / len(commesse), 3),
+                "progressivo_massimo_wh": progressivo_massimo
+            }
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/api/energia/report/settimanale')
+def api_report_energia_settimanale():
+    """API report energetico settimanale: ?inizio=YYYY-MM-DD&fine=YYYY-MM-DD"""
+    try:
+        inizio = request.query.inizio
+        fine = request.query.fine
+        if not inizio or not fine:
+            return {"success": False, "error": "Parametri 'inizio' e 'fine' obbligatori (YYYY-MM-DD)"}
+        report = db.calcola_report_settimanale(inizio, fine)
+        return {"success": True, "report": report}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/api/energia/report/mensile')
+def api_report_energia_mensile():
+    """API report energetico mensile: ?anno=YYYY&mese=MM"""
+    try:
+        anno = int(request.query.anno or datetime.date.today().year)
+        mese = int(request.query.mese or datetime.date.today().month)
+        report = db.calcola_report_mensile(anno, mese)
+        return {"success": True, "report": report, "anno": anno, "mese": mese}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/api/energia/report/annuale')
+def api_report_energia_annuale():
+    """API report energetico annuale: ?anno=YYYY"""
+    try:
+        anno = int(request.query.anno or datetime.date.today().year)
+        report = db.calcola_report_annuale(anno)
+        return {"success": True, "report": report, "anno": anno}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/report/energia/mensile')
+def report_energia_mensile():
+    """Pagina HTML report energetico mensile con grafici"""
+    anno = int(request.query.anno or datetime.date.today().year)
+    mese = int(request.query.mese or datetime.date.today().month)
+    report = db.calcola_report_mensile(anno, mese)
+    nomi_mesi = [
+        "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+        "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
+    ]
+    nome_mese = nomi_mesi[mese - 1]
+    return template("report_energia", report=report, titolo=f"Energia {nome_mese} {anno}",
+                    livello="mensile", anno=anno, mese=mese, nome_mese=nome_mese)
+
+@app.route('/report/energia/annuale')
+def report_energia_annuale():
+    """Pagina HTML report energetico annuale con grafici"""
+    anno = int(request.query.anno or datetime.date.today().year)
+    report = db.calcola_report_annuale(anno)
+    return template("report_energia", report=report, titolo=f"Energia Annuale {anno}",
+                    livello="annuale", anno=anno)
+
+@app.route('/report/energia/settimanale')
+def report_energia_settimanale():
+    """Pagina HTML report energetico settimanale con grafici: ?inizio=YYYY-MM-DD&fine=YYYY-MM-DD"""
+    inizio = request.query.inizio or (datetime.date.today() - datetime.timedelta(days=6)).isoformat()
+    fine = request.query.fine or datetime.date.today().isoformat()
+    report = db.calcola_report_settimanale(inizio, fine)
+    return template("report_energia", report=report, titolo=f"Energia Settimanale {inizio} → {fine}",
+                    livello="settimanale", inizio=inizio, fine=fine)
 
 @app.route('/api/status')
 def api_status():
@@ -681,45 +1020,128 @@ def start_poller_api():
 # TODO: api/report_mensile, api/report_annuale ...
 
 def on_change(new_values, old_values):
+    """
+    Gestisce i cambiamenti di stato delle commesse con logica semplificata:
+    
+    STATI:
+    - preparazione: commessa impostata manualmente
+    - in_lavorazione: lavorazione iniziata, energia iniziale registrata
+    - completata: lavorazione terminata, energia finale calcolata
+    """
     config = load_config()
-    status = ""
-    crx=new_values["Commessa RX"]
-    ctx=new_values["Commessa TX"]
+    crx = new_values["Commessa RX"]
+    ctx = new_values["Commessa TX"]
+    energia_attuale = new_values.get("Potenza consumata TX", 0)
     
-    if crx==ctx:
-        status = "In registrazione"
-    elif crx!=0 and ctx==0:
-        status = "In lavorazione"
-    elif crx==0 and ctx!=0:
-        status = f"Dati registrati\n{new_values}\n"
-        db.insert_record(new_values)
+    print(f'{new_values["timestamp"]} RX: {crx} TX: {ctx}')
+    
+    # CASO 1: LAVORAZIONE INIZIATA (crx != 0, ctx == 0)
+    if crx != 0 and ctx == 0:
+        print(f"🔄 Lavorazione iniziata per commessa {crx}")
         
-        # Auto-increment e invio automatico al PLC
-        if config.get("auto_increment_commessa", True):
+        # Se non esiste un record, crealo automaticamente in stato 'preparazione'
+        if not db.commessa_esiste(crx):
             try:
-                # Ottieni l'ultima commessa
-                ultimi = db.leggi_ultimi(1)
-                if ultimi:
-                    ultima_commessa = ultimi[0].get('commessa_tx', 0)
-                    nuova_commessa = ultima_commessa + 1
-                    default_cer = config.get("default_cer", 160214)
-                    
-                    print(f"Auto-increment commessa: {nuova_commessa}")
-                    
-                    # Invia automaticamente al PLC se abilitato
-                    if config.get("auto_send_to_plc", True) and poller and poller_running:
-                        success = poller.write_tags(nuova_commessa, default_cer)
-                        if success:
-                            print(f"✅ Commessa {nuova_commessa} inviata automaticamente al PLC")
-                        else:
-                            print(f"❌ Errore nell'invio automatico della commessa {nuova_commessa}")
-                    
+                timestamp = datetime.datetime.now().isoformat()
+                record_data = {
+                    'timestamp': timestamp,
+                    'Commessa RX': crx,
+                    'Codice CER RX': config.get("default_cer", 160214),
+                    'Codice CER TX': config.get("default_cer", 160214),
+                    'Commessa TX': crx,
+                    'Ore totali commessa TX': 0,
+                    'Minuti totali commessa TX': 0,
+                    'Ore lavorate commessa TX': 0,
+                    'Minuti lavorati commessa TX': 0,
+                    'Potenza consumata TX': energia_attuale or 0,
+                    'Descrizione commessa': f"Creato automaticamente all'avvio della lavorazione (commessa {crx})",
+                    'stato_lavorazione': 'preparazione'
+                }
+                db.insert_record(record_data)
+                print(f"📝 Record creato automaticamente per commessa {crx} (preparazione)")
             except Exception as e:
-                print(f"Errore nell'auto-increment: {e}")
-    else:
-        status = "In preparazione"
+                print(f"❌ Errore nella creazione automatica del record: {e}")
+        
+        # Aggiorna il record esistente con energia iniziale e stato
+        try:
+            db.aggiorna_energia_iniziale(crx, energia_attuale)
+            print(f"⚡ Energia iniziale registrata: {energia_attuale} Wh per commessa {crx}")
+        except Exception as e:
+            print(f"❌ Errore nella registrazione energia iniziale: {e}")
     
-    print(f'{new_values["timestamp"]} RX: {crx}  TX: {ctx} Stato: {status}')
+    # CASO 2: FASE REGISTRAZIONE (crx == ctx != 0)
+    elif crx == ctx and crx != 0:
+        print(f"📝 Fase registrazione per commessa {crx}")
+        
+        # Aggiorna solo i dati operativi, mantieni energia iniziale e descrizione
+        try:
+            db.aggiorna_dati_operativi(crx, new_values)
+            print(f"📊 Dati operativi aggiornati per commessa {crx}")
+        except Exception as e:
+            print(f"❌ Errore nell'aggiornamento dati operativi: {e}")
+    
+    # CASO 3: LAVORAZIONE COMPLETATA (crx == 0, ctx != 0)
+    elif crx == 0 and ctx != 0:
+        print(f"✅ Lavorazione completata per commessa {ctx}")
+        
+        try:
+            energia_data = db.aggiorna_energia_finale(ctx, energia_attuale)
+            if energia_data is not None:
+                print(f"⚡ Energia consumata: {energia_data['energia_consumata_wh']} Wh")
+                
+                # Auto-increment, invio al PLC e creazione record "preparazione" per la nuova commessa
+                try:
+                    ultimi = db.leggi_ultimi(1)
+                    ultima_commessa = ultimi[0].get('commessa_tx', 0) if ultimi else ctx
+                    nuova_commessa = max(ultima_commessa, ctx) + 1
+                    default_cer = config.get("default_cer", 160214)
+
+                    print(f"Auto-preparazione nuova commessa: {nuova_commessa}")
+
+                    sent=None
+                    # Tenta invio automatico, se abilitato
+                    if config.get("auto_send_to_plc", True) and poller and poller_running:
+                        try:
+                            sent = poller.write_tags(nuova_commessa, default_cer)
+                            if sent:
+                                print(f"✅ Commessa {nuova_commessa} inviata automaticamente al PLC")
+                            else:
+                                print(f"⚠️ Invio automatico al PLC non riuscito per commessa {nuova_commessa}")
+                        except Exception as e:
+                            print(f"⚠️ Errore invio automatico al PLC: {e}")
+
+                    # Crea comunque il record in stato "preparazione" anche se l'invio al PLC manca
+                    if not db.commessa_esiste(nuova_commessa) and sent:
+                        try:
+                            timestamp = datetime.datetime.now().isoformat()
+                            nuovo_record = {
+                                'timestamp': timestamp,
+                                'Commessa RX': nuova_commessa,
+                                'Codice CER RX': default_cer,
+                                'Codice CER TX': default_cer,
+                                'Commessa TX': nuova_commessa,
+                                'Ore totali commessa TX': 0,
+                                'Minuti totali commessa TX': 0,
+                                'Ore lavorate commessa TX': 0,
+                                'Minuti lavorati commessa TX': 0,
+                                'Potenza consumata TX': energia_attuale or 0,
+                                'Descrizione commessa': f"Creato automaticamente alla chiusura della commessa {ctx}",
+                                'stato_lavorazione': 'preparazione'
+                            }
+                            db.insert_record(nuovo_record)
+                            print(f"📝 Record creato automaticamente per nuova commessa {nuova_commessa} (preparazione)")
+                        except Exception as e:
+                            print(f"❌ Errore creazione record nuova commessa {nuova_commessa}: {e}")
+                except Exception as e:
+                    print(f"Errore nell'auto-preparazione nuova commessa: {e}")
+            else:
+                print(f"⚠️ Commessa {ctx} non trovata in lavorazione")
+        except Exception as e:
+            print(f"❌ Errore nella registrazione energia finale: {e}")
+    
+    # CASO 4: ALTRI STATI (preparazione, attesa, ecc.)
+    else:
+        print(f"⏳ Stato: In preparazione")
 
 def run_server_only():
     """Avvia solo il server web senza provider di dati"""
@@ -727,12 +1149,13 @@ def run_server_only():
     run(app, host=WEB_HOST, port=WEB_PORT, debug=WEB_DEBUG, reloader=False)
 
 if __name__ == '__main__':
-    # Determina la modalità di esecuzione
+    # Determina la modalità: argomento a riga di comando, oppure env OPC_LOGGER_MODE, oppure default standalone
     mode = None
     if len(sys.argv) > 1:
         mode = sys.argv[1]
-    
-    print(f"Avvio server in modalità: {mode or get_mode_from_env()}")
+    if mode is None:
+        mode = get_mode_from_env()
+    print(f"Avvio server in modalità: {mode}")
     
     # Prova ad avviare il poller
     poller_started = start_poller_in_background(mode)

@@ -8,6 +8,9 @@ import time
 from opcua_reader import OpcuaReader
 from config import *
 
+def datalog(data):
+    print(f"{data['timestamp']},{data['Potenza consumata TX']} ")
+
 def test_opcua_connection():
     """Test della connessione OPC UA"""
     print("🧪 Test Connessione OPC UA")
@@ -22,22 +25,25 @@ def test_opcua_connection():
             namespace_index=OPCUA_NAMESPACE_INDEX,
             tag_prefix=OPCUA_TAG_PREFIX,
             on_change_callback=None,
-            interval=1.0
+            on_read_callback=datalog,
+            interval=2.0
         )
         
         print(f"🔗 Tentativo di connessione a: {OPCUA_SERVER_URL}")
         
         # Prova a connettersi
-        reader.connect()
+#        reader.connect()
         
         print("✅ Connessione riuscita!")
         
         # Prova a leggere i dati
         print("📖 Lettura dati...")
-        for i in range(3):
-            data = reader.read_once()
-            print(f"   Lettura {i+1}: {data}")
-            time.sleep(1)
+        #for i in range(300):
+        #    data = reader.read_once()
+        #    print(f"   Lettura {i+1}: {data}")
+        #    #datalog(data)
+        #    time.sleep(1)
+        reader.start_poll()
         
         # Prova a scrivere (simulazione)
         print("✍️  Test scrittura...")
@@ -48,7 +54,7 @@ def test_opcua_connection():
             print("❌ Errore nella scrittura")
         
         # Disconnetti
-        reader.disconnect()
+#        reader.disconnect()
         print("🔌 Disconnesso")
         
         return True
@@ -61,6 +67,8 @@ def test_opcua_connection():
         print("   - Firewall che blocca la connessione")
         print("   - Namespace o tag prefix errati")
         return False
+
+
 
 if __name__ == "__main__":
     success = test_opcua_connection()

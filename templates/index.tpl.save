@@ -200,9 +200,23 @@
         <!-- Sezione Dati Recenti - Espansa di default -->
         <div class="status-card">
             <h3>📋 Dati Recenti</h3>
+            <div class="row align-items-center mb-3">
+                <div class="col-md-6">
+                    <p class="mb-0">Mostrando <strong>{{num_records}}</strong> record più recenti</p>
+                </div>
+                <div class="col-md-6">
+                    <form method="GET" class="d-flex">
+                        <input type="number" name="n" value="{{num_records}}" min="1" max="100" class="form-control me-2" style="width: auto;">
+                        <button type="submit" class="btn btn-primary">Cambia</button>
+                    </form>
+                </div>
+            </div>
             <div class="mb-3">
-                <p class="mb-0">Mostrando <strong>{{num_records}}</strong> record totali</p>
-                <small class="text-muted">Tutti i record sono visualizzati con il loro stato attuale</small>
+                <small class="text-muted">Suggerimenti: </small>
+                <a href="/?n=10" class="btn btn-sm btn-outline-secondary">10</a>
+                <a href="/?n=25" class="btn btn-sm btn-outline-secondary">25</a>
+                <a href="/?n=50" class="btn btn-sm btn-outline-secondary">50</a>
+                <a href="/?n=100" class="btn btn-sm btn-outline-secondary">100</a>
             </div>
 
             <div class="table-responsive">
@@ -213,14 +227,10 @@
                             <th>Commessa</th>
                             <th>Codice CER</th>
                             <th>Descrizione</th>
-                            <th>Stato <span class="badge bg-info" title="Stato attuale della commessa">ℹ️</span></th>
                             <th>Ore totali</th>
                             <th>Minuti totali</th>
                             <th>Ore lavorate</th>
                             <th>Minuti lavorati</th>
-                            <th>Energia Iniziale (Wh) <span class="badge bg-primary" title="Energia all'inizio della lavorazione">ℹ️</span></th>
-                            <th>Energia Finale (Wh) <span class="badge bg-warning" title="Energia alla fine della lavorazione">ℹ️</span></th>
-                            <th>Energia Consumata (Wh) <span class="badge bg-success" title="Energia effettivamente consumata per questa commessa">ℹ️</span></th>
                             <th>Progressivo (Wh) <span class="badge bg-info" title="Valore progressivo dell'energia totale">ℹ️</span></th>
                             <th>Energia Calcolata (kWh) <span class="badge bg-success" title="Energia effettivamente consumata per questa commessa">ℹ️</span></th>
                         </tr>
@@ -233,21 +243,17 @@
                                     <td>{{riga['commessa_tx']}}</td>
                                     <td>{{riga['codice_cer_tx']}}</td>
                                     <td>{{riga.get('descrizione_commessa', '')}}</td>
-                                    <td><span class="badge {{riga.get('badge_class', 'bg-secondary')}}">{{riga.get('icona', '❓')}} {{riga.get('stato_visivo', 'Sconosciuto')}}</span></td>
                                     <td>{{riga['ore_totali_commessa_tx']}}</td>
                                     <td>{{riga['minuti_totali_commessa_tx']}}</td>
                                     <td>{{riga['ore_lavorate_commessa_tx']}}</td>
                                     <td>{{riga['minuti_lavorati_commessa_tx']}}</td>
-                                    <td><span class="badge bg-primary">{{riga.get('energia_iniziale_wh', 0)}}</span></td>
-                                    <td><span class="badge bg-warning">{{riga.get('energia_finale_wh', 0)}}</span></td>
-                                    <td><span class="badge bg-success"><strong>{{riga.get('energia_consumata_wh', 0)}}</strong></span></td>
                                     <td>{{riga.get('progressivo_wh', riga['potenza_consumata_tx'])}}</td>
                                     <td><strong>{{riga.get('energia_calcolata_kwh', 0)}}</strong></td>
                                 </tr>
                             % end
                         % else:
                             <tr>
-                                <td colspan="14" class="text-center text-muted">Nessun dato disponibile</td>
+                                <td colspan="10" class="text-center text-muted">Nessun dato disponibile</td>
                             </tr>
                         % end
                     </tbody>
@@ -266,43 +272,6 @@
             </div>
         </div>
 -->
-        
-        <!-- Sezione Statistiche Stati -->
-        <div class="commessa-form">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h3>📊 Statistiche Stati Commesse</h3>
-                <button class="btn btn-sm btn-outline-primary" onclick="aggiornaStatisticheStati()">
-                    🔄 Aggiorna Stati
-                </button>
-            </div>
-            <div class="row">
-                <div class="col-md-3">
-                    <div class="stat-item">
-                        <div class="stat-value" id="stato-completate">0</div>
-                        <div class="stat-label">✅ Completate</div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="stat-item">
-                        <div class="stat-value" id="stato-lavorazione">0</div>
-                        <div class="stat-label">🔄 In Lavorazione</div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="stat-item">
-                        <div class="stat-value" id="stato-preparazione">0</div>
-                        <div class="stat-label">⏳ In Preparazione</div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="stat-item">
-                        <div class="stat-value" id="stato-attesa">0</div>
-                        <div class="stat-label">⏸️ In Attesa</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Sezione Statistiche Energia -->
         <div class="commessa-form">
             <div class="d-flex justify-content-between align-items-center mb-3">
@@ -653,71 +622,12 @@
 
         // Calcola le statistiche quando la pagina è caricata
         calcolaStatisticheEnergia();
-        calcolaStatisticheStati();
-
-        // Funzione per calcolare le statistiche degli stati
-        function calcolaStatisticheStati() {
-            const commesse = [
-                % if commesse:
-                                    % for idx, riga in enumerate(commesse):
-                        {
-                            stato_visivo: "{{riga.get('stato_visivo', 'Sconosciuto')}}"
-                        }{{',' if idx < len(commesse) - 1 else ''}}
-                    % end
-            ];
-            
-            if (commesse.length === 0) {
-                document.getElementById('stato-completate').textContent = '0';
-                document.getElementById('stato-lavorazione').textContent = '0';
-                document.getElementById('stato-preparazione').textContent = '0';
-                document.getElementById('stato-attesa').textContent = '0';
-                return;
-            }
-            
-            let completate = 0;
-            let lavorazione = 0;
-            let preparazione = 0;
-            let attesa = 0;
-            
-            commesse.forEach(commessa => {
-                const stato = commessa.stato_visivo;
-                if (stato === 'Completata') {
-                    completate++;
-                } else if (stato === 'In Lavorazione') {
-                    lavorazione++;
-                } else if (stato === 'In Preparazione') {
-                    preparazione++;
-                } else if (stato === 'In Attesa') {
-                    attesa++;
-                }
-            });
-            
-            document.getElementById('stato-completate').textContent = completate;
-            document.getElementById('stato-lavorazione').textContent = lavorazione;
-            document.getElementById('stato-preparazione').textContent = preparazione;
-            document.getElementById('stato-attesa').textContent = attesa;
-        }
-
-        // Funzione per aggiornare le statistiche degli stati
-        function aggiornaStatisticheStati() {
-            fetch(`/api/commesse/recenti`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.commesse) {
-                    // Ricarica la pagina per aggiornare le statistiche
-                    location.reload();
-                } else {
-                    console.error('Errore nel caricamento delle statistiche stati:', data.error);
-                }
-            })
-            .catch(error => {
-                console.error('Errore di connessione:', error);
-            });
-        }
 
         // Funzione per aggiornare le statistiche dell'energia tramite API
         function aggiornaStatisticheEnergia() {
-            fetch(`/api/energia/statistiche`)
+            const n = {{num_records}};
+            
+            fetch(`/api/energia/statistiche?n=${n}`)
             .then(response => response.json())
             .then(data => {
                 if (data.success) {

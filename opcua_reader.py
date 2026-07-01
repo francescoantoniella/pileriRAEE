@@ -7,8 +7,8 @@ from data_provider import DataProvider
 
 
 class OpcuaReader(DataProvider):
-    def __init__(self, server_url, tag_names, tag_check, namespace_index=2, tag_prefix="Siemens S7-1200/S7-1500.Tags.", on_change_callback=None, interval=1.0):
-        super().__init__(tag_names, tag_check, on_change_callback, interval)
+    def __init__(self, server_url, tag_names, tag_check, namespace_index=2, tag_prefix="Siemens S7-1200/S7-1500.Tags.", on_change_callback=None, on_read_callback=None, interval=2.0):
+        super().__init__(tag_names, tag_check, on_change_callback, on_read_callback, interval)
         self.server_url = server_url
         self.namespace_index = namespace_index
         self.tag_prefix = tag_prefix
@@ -17,9 +17,9 @@ class OpcuaReader(DataProvider):
 
     def connect(self):
         try:
-            print(f"Tentativo di connessione a: {self.server_url}")
+            #print(f"Tentativo di connessione a: {self.server_url}")
             self.client.connect()
-            print("Connesso al server OPC UA")
+            #print("Connesso al server OPC UA")
             
             # Prepara i nodi OPC UA
             for name in self.tag_names:
@@ -27,7 +27,7 @@ class OpcuaReader(DataProvider):
                 try:
                     node = self.client.get_node(ua.NodeId(node_id_str, self.namespace_index))
                     self.tag_nodes[name] = node
-                    print(f"Nodo preparato: {name}")
+                    #print(f"Nodo preparato: {name}")
                 except Exception as e:
                     print(f"Errore nella preparazione del nodo {name}: {e}")
                     # Crea un nodo fittizio per evitare errori
@@ -41,11 +41,13 @@ class OpcuaReader(DataProvider):
         try:
             if hasattr(self, 'client') and self.client:
                 self.client.disconnect()
-                print("Disconnesso dal server OPC UA")
+               # print("Disconnesso dal server OPC UA")
         except Exception as e:
             print(f"Errore nella disconnessione OPC UA: {e}")
 
     def read_once(self):
+        #print("Read once")
+        self.connect()
         result = {"timestamp": datetime.now().isoformat() + "Z"}
         
         for name, node in self.tag_nodes.items():
@@ -58,11 +60,12 @@ class OpcuaReader(DataProvider):
             except Exception as e:
                 print(f"Errore nella lettura del tag {name}: {e}")
                 result[name] = 0  # Valore di default in caso di errore
-                
+        self.disconnect()
         return result
         
     def write_tags(self, nuova_commessa, nuovo_cer):
         try:
+            self.connect()
             print(f"Tentativo di scrittura: Commessa={nuova_commessa}, CER={nuovo_cer}")
             
             # Nodi per la scrittura
@@ -79,8 +82,10 @@ class OpcuaReader(DataProvider):
             cer_node.set_attribute(ua.AttributeIds.Value, dv)
             
             print("Scrittura completata con successo")
+            self.disconnect()
             return True
             
         except Exception as e:
             print(f"Errore nella scrittura dei tag OPC UA: {e}")
+            self.disconnect()
             return False
