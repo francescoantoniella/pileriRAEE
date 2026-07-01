@@ -1,0 +1,75 @@
+# File Python compilati
+__pycache__/
+*.py[cod]
+*$py.class
+
+# File di distribuzione
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# File di test e sviluppo
+test_standalone.py
+opcua_reader_sim.py
+record.json
+record_example.json
+
+# Database di test
+test.db
+*.db.bak
+telemetria.db.old
+telemetria_2.db
+telemetria_ricostruita.db
+telemetria_ricostruito.db
+
+# File di log
+*.log
+
+# File temporanei
+*.tmp
+*.temp
+
+# Directory static vuota
+static/
+
+# File di ambiente
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# File di backup
+*.bak
+*.backup
+*.save
+
+# File di sicurezza
+admin_password.txt 

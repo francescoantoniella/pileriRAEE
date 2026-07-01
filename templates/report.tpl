@@ -102,6 +102,7 @@
                         <th>Ora Chiusura</th>
                         <th>Commessa</th>
                         <th>Codice CER</th>
+                        <th>Descrizione</th>
                         <th>Ore totali</th>
                         <th>Minuti totali</th>
                         <th>Ore lavorate</th>
@@ -116,6 +117,7 @@
                                 <td>{{riga.get('timestamp_formatted', riga['timestamp'])}}</td>
                                 <td>{{riga['commessa_tx']}}</td>
                                 <td>{{riga['codice_cer_tx']}}</td>
+                                <td>{{riga.get('descrizione_commessa', '')}}</td>
                                 <td>{{riga['ore_totali_commessa_tx']}}</td>
                                 <td>{{riga['minuti_totali_commessa_tx']}}</td>
                                 <td>{{riga['ore_lavorate_commessa_tx']}}</td>
@@ -125,7 +127,7 @@
                         % end
                     % else:
                         <tr>
-                            <td colspan="8" class="text-center text-muted">Nessun dato disponibile per questa data</td>
+                            <td colspan="9" class="text-center text-muted">Nessun dato disponibile per questa data</td>
                         </tr>
                     % end
                 </tbody>

@@ -1,7 +1,11 @@
 import os
 
 # Configurazione del database
-DATABASE_PATH = "telemetria.db"
+DATABASE_PATH = "telemetria_ricostruita.db"
+
+# Conversione valore raw (Potenza consumata TX / energia_*_wh) → kWh
+# Il PLC fornisce un progressivo in unità tali che: valore_raw / RAW_TO_KWH = kWh
+RAW_TO_KWH = 100
 
 # Configurazione OPC UA
 OPCUA_SERVER_URL = "opc.tcp://192.168.1.2:4840"
@@ -9,8 +13,8 @@ OPCUA_NAMESPACE_INDEX = 2
 OPCUA_TAG_PREFIX = "Siemens S7-1200/S7-1500.Tags."
 
 # Configurazione del server web
-WEB_HOST = "0.0.0.0"
-WEB_PORT = 8080
+WEB_HOST = "0.0.0.0"  # in locale usa localhost; in produzione impostare "0.0.0.0"
+WEB_PORT = 80        # 8080 per test senza root; in produzione usare 80 (richiede sudo)
 WEB_DEBUG = True
 
 # Configurazione del polling
@@ -26,8 +30,7 @@ TAG_LIST = [
     "Minuti totali commessa TX",
     "Ore lavorate commessa TX",
     "Minuti lavorati commessa TX",
-    "Potenza consumata TX"
-]
+    "Potenza consumata TX"]
 
 # Tag da monitorare per i cambiamenti
 TAG_CHECK = ['Commessa TX', 'Commessa RX']

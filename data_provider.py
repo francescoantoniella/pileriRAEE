@@ -8,10 +8,11 @@ import os
 class DataProvider(ABC):
     """Interfaccia comune per i provider di dati"""
     
-    def __init__(self, tag_names, tag_check, on_change_callback=None, interval=1.0):
+    def __init__(self, tag_names, tag_check, on_change_callback=None, on_read_callback=None, interval=1.0):
         self.tag_names = tag_names
         self.tag_check = tag_check
         self.on_change_callback = on_change_callback
+        self.on_read_callback = on_read_callback
         self.interval = interval
         self.running = False
         self.last_values = {}
@@ -57,7 +58,11 @@ class DataProvider(ABC):
         while self.running:
             try:
                 new_data = self.read_once()
-                
+                if self.on_read_callback:
+                    print("Read callback")
+                    self.on_read_callback(new_data) 
+                else: 
+                    print("No read callback")
                 with self.lock:
                     self.actual_values = new_data
                     changes = {}
@@ -85,8 +90,8 @@ class DataProvider(ABC):
 class StandaloneDataProvider(DataProvider):
     """Provider di dati standalone - nessuna connessione OPC UA"""
     
-    def __init__(self, tag_names, tag_check, on_change_callback=None, interval=1.0):
-        super().__init__(tag_names, tag_check, on_change_callback, interval)
+    def __init__(self, tag_names, tag_check, on_change_callback=None, on_read_callback=None, interval=1.0):
+        super().__init__(tag_names, tag_check, on_change_callback, on_read_callback, interval)
         print("Modalità standalone: nessuna connessione OPC UA richiesta")
     
     def connect(self):

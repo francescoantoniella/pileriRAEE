@@ -132,6 +132,52 @@
             <div id="commessaStatus" class="mt-2"></div>
         </div>
 
+        <!-- Sezione Gestione Descrizioni Commesse -->
+        <div class="commessa-form">
+            <h3>📝 Gestione Descrizioni Commesse</h3>
+            <form id="descrizioneForm" class="row g-3">
+                <div class="col-md-4">
+                    <label for="commessa-descrizione" class="form-label">Numero Commessa</label>
+                    <input type="number" class="form-control" id="commessa-descrizione" name="commessa-descrizione" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="descrizione-testo" class="form-label">Descrizione</label>
+                    <input type="text" class="form-control" id="descrizione-testo" name="descrizione-testo" placeholder="Inserisci descrizione della commessa">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">&nbsp;</label>
+                    <div>
+                        <button type="submit" class="btn btn-primary">Salva Descrizione</button>
+                    </div>
+                </div>
+            </form>
+            <div id="descrizioneStatus" class="mt-2"></div>
+        </div>
+
+        <!-- Sezione Calcolo Energia Commessa -->
+<!--        <div class="commessa-form">
+            <h3>⚡ Calcolo Energia Commessa</h3>
+            <form id="energiaForm" class="row g-3">
+                <div class="col-md-4">
+                    <label for="commessa-energia" class="form-label">Numero Commessa</label>
+                    <input type="number" class="form-control" id="commessa-energia" name="commessa-energia" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">&nbsp;</label>
+                    <div>
+                        <button type="submit" class="btn btn-success">Calcola Energia</button>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">&nbsp;</label>
+                    <div>
+                        <button type="button" class="btn btn-info" onclick="calcolaTutteLeCommesse()">Calcola Tutte le Commesse</button>
+                    </div>
+                </div>
+            </form>
+            <div id="energiaStatus" class="mt-2"></div>
+        </div>
+-->
         <!-- Sezione Report - Espansa di default -->
         <div class="report-section">
             <h3>📊 Report e Analisi</h3>
@@ -154,23 +200,9 @@
         <!-- Sezione Dati Recenti - Espansa di default -->
         <div class="status-card">
             <h3>📋 Dati Recenti</h3>
-            <div class="row align-items-center mb-3">
-                <div class="col-md-6">
-                    <p class="mb-0">Mostrando <strong>{{num_records}}</strong> record più recenti</p>
-                </div>
-                <div class="col-md-6">
-                    <form method="GET" class="d-flex">
-                        <input type="number" name="n" value="{{num_records}}" min="1" max="100" class="form-control me-2" style="width: auto;">
-                        <button type="submit" class="btn btn-primary">Cambia</button>
-                    </form>
-                </div>
-            </div>
             <div class="mb-3">
-                <small class="text-muted">Suggerimenti: </small>
-                <a href="/?n=10" class="btn btn-sm btn-outline-secondary">10</a>
-                <a href="/?n=25" class="btn btn-sm btn-outline-secondary">25</a>
-                <a href="/?n=50" class="btn btn-sm btn-outline-secondary">50</a>
-                <a href="/?n=100" class="btn btn-sm btn-outline-secondary">100</a>
+                <p class="mb-0">Mostrando <strong>{{num_records}}</strong> record totali</p>
+                <small class="text-muted">Tutti i record sono visualizzati con il loro stato attuale</small>
             </div>
 
             <div class="table-responsive">
@@ -180,11 +212,17 @@
                             <th>Ora Chiusura</th>
                             <th>Commessa</th>
                             <th>Codice CER</th>
+                            <th>Descrizione</th>
+                            <th>Stato <span class="badge bg-info" title="Stato attuale della commessa">ℹ️</span></th>
                             <th>Ore totali</th>
                             <th>Minuti totali</th>
                             <th>Ore lavorate</th>
                             <th>Minuti lavorati</th>
-                            <th>Energia consumata</th>
+                            <th>Energia Iniziale (Wh) <span class="badge bg-primary" title="Energia all'inizio della lavorazione">ℹ️</span></th>
+                            <th>Energia Finale (Wh) <span class="badge bg-warning" title="Energia alla fine della lavorazione">ℹ️</span></th>
+                            <th>Energia Consumata (Wh) <span class="badge bg-success" title="Energia effettivamente consumata per questa commessa">ℹ️</span></th>
+                            <th>Progressivo (Wh) <span class="badge bg-info" title="Valore progressivo dell'energia totale">ℹ️</span></th>
+                            <th>Energia Calcolata (kWh) <span class="badge bg-success" title="Energia effettivamente consumata per questa commessa">ℹ️</span></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -194,22 +232,113 @@
                                     <td>{{riga.get('timestamp_formatted', riga['timestamp'])}}</td>
                                     <td>{{riga['commessa_tx']}}</td>
                                     <td>{{riga['codice_cer_tx']}}</td>
+                                    <td>{{riga.get('descrizione_commessa', '')}}</td>
+                                    <td><span class="badge {{riga.get('badge_class', 'bg-secondary')}}">{{riga.get('icona', '❓')}} {{riga.get('stato_visivo', 'Sconosciuto')}}</span></td>
                                     <td>{{riga['ore_totali_commessa_tx']}}</td>
                                     <td>{{riga['minuti_totali_commessa_tx']}}</td>
                                     <td>{{riga['ore_lavorate_commessa_tx']}}</td>
                                     <td>{{riga['minuti_lavorati_commessa_tx']}}</td>
-                                    <td>{{riga['potenza_consumata_tx']}}</td>
+                                    <td><span class="badge bg-primary">{{riga.get('energia_iniziale_wh', 0)}}</span></td>
+                                    <td><span class="badge bg-warning">{{riga.get('energia_finale_wh', 0)}}</span></td>
+                                    <td><span class="badge bg-success"><strong>{{riga.get('energia_consumata_wh', 0)}}</strong></span></td>
+                                    <td>{{riga.get('progressivo_wh', riga['potenza_consumata_tx'])}}</td>
+                                    <td><strong>{{riga.get('energia_calcolata_kwh', 0)}}</strong></td>
                                 </tr>
                             % end
                         % else:
                             <tr>
-                                <td colspan="8" class="text-center text-muted">Nessun dato disponibile</td>
+                                <td colspan="14" class="text-center text-muted">Nessun dato disponibile</td>
                             </tr>
                         % end
                     </tbody>
                 </table>
             </div>
+            
+            <!-- Nota esplicativa -->
+<!--
+            <div class="alert alert-info mt-3">
+                <h6>💡 Come funziona il calcolo dell'energia:</h6>
+                <ul class="mb-0">
+                    <li><strong>Progressivo (Wh):</strong> Valore cumulativo dell'energia totale dal PLC</li>
+                    <li><strong>Energia Calcolata (kWh):</strong> Differenza tra progressivo finale e precedente = energia effettivamente consumata per questa commessa</li>
+                    <li><strong>Formula:</strong> Energia Commessa = Progressivo Finale - Progressivo Precedente</li>
+                </ul>
+            </div>
         </div>
+-->
+        
+        <!-- Sezione Statistiche Stati -->
+        <div class="commessa-form">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3>📊 Statistiche Stati Commesse</h3>
+                <button class="btn btn-sm btn-outline-primary" onclick="aggiornaStatisticheStati()">
+                    🔄 Aggiorna Stati
+                </button>
+            </div>
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value" id="stato-completate">0</div>
+                        <div class="stat-label">✅ Completate</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value" id="stato-lavorazione">0</div>
+                        <div class="stat-label">🔄 In Lavorazione</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value" id="stato-preparazione">0</div>
+                        <div class="stat-label">⏳ In Preparazione</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value" id="stato-attesa">0</div>
+                        <div class="stat-label">⏸️ In Attesa</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sezione Statistiche Energia -->
+        <div class="commessa-form">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3>⚡ Statistiche Energia Recenti</h3>
+                <button class="btn btn-sm btn-outline-primary" onclick="aggiornaStatisticheEnergia()">
+                    🔄 Aggiorna
+                </button>
+            </div>
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value" id="totale-commesse">{{len(commesse) if commesse else 0}}</div>
+                        <div class="stat-label">Commesse Mostrate</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value" id="energia-totale">0</div>
+                        <div class="stat-label">Energia Totale (kWh)</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value" id="energia-media">0</div>
+                        <div class="stat-label">Energia Media (kWh)</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value" id="progressivo-attuale">0</div>
+                        <div class="stat-label">Progressivo Attuale (Wh)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
 
         <!-- Sezione Sistema - Collassabile -->
         <div class="status-card">
@@ -354,6 +483,126 @@
             });
         });
 
+        // Funzione per gestire il form delle descrizioni
+        document.getElementById('descrizioneForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const commessaTx = document.getElementById('commessa-descrizione').value;
+            const descrizione = document.getElementById('descrizione-testo').value;
+            
+            if (!commessaTx) {
+                alert('Inserisci il numero della commessa');
+                return;
+            }
+
+            fetch('/api/commessa/descrizione', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    commessa_tx: parseInt(commessaTx),
+                    descrizione: descrizione
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const statusDiv = document.getElementById('descrizioneStatus');
+                if (data.success) {
+                    statusDiv.innerHTML = '<div class="alert alert-success">Descrizione salvata con successo!</div>';
+                    // Pulisci il form
+                    document.getElementById('descrizione-testo').value = '';
+                } else {
+                    statusDiv.innerHTML = '<div class="alert alert-danger">Errore: ' + (data.error || 'Errore sconosciuto') + '</div>';
+                }
+            })
+            .catch(error => {
+                document.getElementById('descrizioneStatus').innerHTML = '<div class="alert alert-danger">Errore di connessione</div>';
+            });
+        });
+
+        // Funzione per gestire il calcolo dell'energia
+        document.getElementById('energiaForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const commessaTx = document.getElementById('commessa-energia').value;
+            
+            if (!commessaTx) {
+                alert('Inserisci il numero della commessa');
+                return;
+            }
+
+            fetch(`/api/commessa/energia/${commessaTx}`)
+            .then(response => response.json())
+            .then(data => {
+                const statusDiv = document.getElementById('energiaStatus');
+                if (data.success) {
+                    const energiaWh = data.energia_consumata_wh;
+                    const energiaKwh = data.energia_consumata_kwh;
+                    const progressivoPrec = data.progressivo_precedente;
+                    const progressivoFinale = data.progressivo_finale;
+                    const descrizione = data.descrizione || 'Nessuna descrizione';
+                    
+                    statusDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <h5>⚡ Energia Commessa ${commessaTx}</h5>
+                            <p><strong>Energia consumata:</strong> ${energiaWh} Wh (${energiaKwh} kWh)</p>
+                            <p><strong>Progressivo precedente:</strong> ${progressivoPrec} Wh</p>
+                            <p><strong>Progressivo finale:</strong> ${progressivoFinale} Wh</p>
+                            <p><strong>Descrizione:</strong> ${descrizione}</p>
+                            <p><strong>Timestamp:</strong> ${data.timestamp}</p>
+                        </div>
+                    `;
+                } else {
+                    statusDiv.innerHTML = '<div class="alert alert-danger">Errore: ' + (data.error || 'Errore sconosciuto') + '</div>';
+                }
+            })
+            .catch(error => {
+                document.getElementById('energiaStatus').innerHTML = '<div class="alert alert-danger">Errore di connessione</div>';
+            });
+        });
+
+        // Funzione per calcolare tutte le commesse
+        function calcolaTutteLeCommesse() {
+            const statusDiv = document.getElementById('energiaStatus');
+            statusDiv.innerHTML = '<div class="alert alert-info">🔄 Calcolo in corso...</div>';
+            
+            fetch('/api/commesse/energia/tutte')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const commesse = data.commesse;
+                    const stats = data.statistiche;
+                    
+                    let html = `
+                        <div class="alert alert-success">
+                            <h5>📊 Energia Tutte le Commesse</h5>
+                            <p><strong>Totale commesse:</strong> ${stats.totale_commesse}</p>
+                            <p><strong>Energia totale:</strong> ${stats.energia_totale_wh} Wh (${stats.energia_totale_kwh} kWh)</p>
+                            <p><strong>Energia media:</strong> ${stats.energia_media_kwh} kWh per commessa</p>
+                            <hr>
+                            <h6>Top 5 Commesse:</h6>
+                    `;
+                    
+                    // Ordina per energia decrescente e mostra top 5
+                    const sortedCommesse = commesse.sort((a, b) => b.energia_consumata_wh - a.energia_consumata_wh);
+                    
+                    for (let i = 0; i < Math.min(5, sortedCommesse.length); i++) {
+                        const commessa = sortedCommesse[i];
+                        html += `<p>${i+1}. Commessa ${commessa.commessa_tx}: ${commessa.energia_consumata_wh} Wh (${commessa.energia_consumata_kwh.toFixed(3)} kWh) - ${commessa.descrizione || 'Nessuna descrizione'}</p>`;
+                    }
+                    
+                    html += '</div>';
+                    statusDiv.innerHTML = html;
+                } else {
+                    statusDiv.innerHTML = '<div class="alert alert-danger">Errore: ' + (data.error || 'Errore sconosciuto') + '</div>';
+                }
+            })
+            .catch(error => {
+                statusDiv.innerHTML = '<div class="alert alert-danger">Errore di connessione</div>';
+            });
+        }
+
         // Funzione per collassare/espandere sezioni
         function toggleSection(sectionId) {
             const content = document.getElementById(sectionId);
@@ -366,6 +615,136 @@
                 content.style.display = 'none';
                 arrow.textContent = '▶';
             }
+        }
+
+        // Funzione per calcolare le statistiche dell'energia
+        function calcolaStatisticheEnergia() {
+            const commesse = [
+                % if commesse:
+                                    % for idx, riga in enumerate(commesse):
+                        {
+                            energia_calcolata_kwh: {{riga.get('energia_calcolata_kwh', 0)}},
+                            progressivo_wh: {{riga.get('progressivo_wh', riga.get('potenza_consumata_tx', 0))}}
+                        }{{',' if idx < len(commesse) - 1 else ''}}
+                    % end
+            ];
+            
+            if (commesse.length === 0) {
+                document.getElementById('energia-totale').textContent = '0';
+                document.getElementById('energia-media').textContent = '0';
+                document.getElementById('progressivo-attuale').textContent = '0';
+                return;
+            }
+            
+            let energiaTotale = 0;
+            let progressivoMassimo = 0;
+            
+            commesse.forEach(commessa => {
+                energiaTotale += commessa.energia_calcolata_kwh || 0;
+                progressivoMassimo = Math.max(progressivoMassimo, commessa.progressivo_wh || 0);
+            });
+            
+            const energiaMedia = commesse.length > 0 ? energiaTotale / commesse.length : 0;
+            
+            document.getElementById('energia-totale').textContent = energiaTotale.toFixed(3);
+            document.getElementById('energia-media').textContent = energiaMedia.toFixed(3);
+            document.getElementById('progressivo-attuale').textContent = progressivoMassimo.toLocaleString();
+        }
+
+        // Calcola le statistiche quando la pagina è caricata
+        calcolaStatisticheEnergia();
+        calcolaStatisticheStati();
+
+        // Funzione per calcolare le statistiche degli stati
+        function calcolaStatisticheStati() {
+            const commesse = [
+                % if commesse:
+                                    % for idx, riga in enumerate(commesse):
+                        {
+                            stato_visivo: "{{riga.get('stato_visivo', 'Sconosciuto')}}"
+                        }{{',' if idx < len(commesse) - 1 else ''}}
+                    % end
+            ];
+            
+            if (commesse.length === 0) {
+                document.getElementById('stato-completate').textContent = '0';
+                document.getElementById('stato-lavorazione').textContent = '0';
+                document.getElementById('stato-preparazione').textContent = '0';
+                document.getElementById('stato-attesa').textContent = '0';
+                return;
+            }
+            
+            let completate = 0;
+            let lavorazione = 0;
+            let preparazione = 0;
+            let attesa = 0;
+            
+            commesse.forEach(commessa => {
+                const stato = commessa.stato_visivo;
+                if (stato === 'Completata') {
+                    completate++;
+                } else if (stato === 'In Lavorazione') {
+                    lavorazione++;
+                } else if (stato === 'In Preparazione') {
+                    preparazione++;
+                } else if (stato === 'In Attesa') {
+                    attesa++;
+                }
+            });
+            
+            document.getElementById('stato-completate').textContent = completate;
+            document.getElementById('stato-lavorazione').textContent = lavorazione;
+            document.getElementById('stato-preparazione').textContent = preparazione;
+            document.getElementById('stato-attesa').textContent = attesa;
+        }
+
+        // Funzione per aggiornare le statistiche degli stati
+        function aggiornaStatisticheStati() {
+            fetch(`/api/commesse/recenti`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.commesse) {
+                    // Ricarica la pagina per aggiornare le statistiche
+                    location.reload();
+                } else {
+                    console.error('Errore nel caricamento delle statistiche stati:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Errore di connessione:', error);
+            });
+        }
+
+        // Funzione per aggiornare le statistiche dell'energia tramite API
+        function aggiornaStatisticheEnergia() {
+            fetch(`/api/energia/statistiche`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const stats = data.statistiche;
+                    document.getElementById('energia-totale').textContent = stats.energia_totale_kwh.toFixed(3);
+                    document.getElementById('energia-media').textContent = stats.energia_media_kwh.toFixed(3);
+                    document.getElementById('progressivo-attuale').textContent = stats.progressivo_massimo_wh.toLocaleString();
+                    
+                    // Mostra un feedback visivo
+                    const button = event.target;
+                    const originalText = button.innerHTML;
+                    button.innerHTML = '✅ Aggiornato';
+                    button.classList.add('btn-success');
+                    button.classList.remove('btn-outline-primary');
+                    
+                    setTimeout(() => {
+                        button.innerHTML = originalText;
+                        button.classList.remove('btn-success');
+                        button.classList.add('btn-outline-primary');
+                    }, 2000);
+                } else {
+                    console.error('Errore nel caricamento delle statistiche:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Errore di connessione:', error);
+            });
         }
 
         // Funzione per aggiornare lo stato del sistema
