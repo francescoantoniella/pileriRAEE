@@ -28,8 +28,8 @@ opcua_reader_sim.py
 record.json
 record_example.json
 
-# Database di test
-test.db
+# Database (mai versionati: sono stato runtime mutabile, un checkout li sovrascriverebbe)
+*.db
 *.db.bak
 
 # File di log
