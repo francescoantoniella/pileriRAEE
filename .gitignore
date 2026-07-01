@@ -31,6 +31,10 @@ record_example.json
 # Database di test
 test.db
 *.db.bak
+telemetria.db.old
+telemetria_2.db
+telemetria_ricostruita.db
+telemetria_ricostruito.db
 
 # File di log
 *.log
@@ -65,6 +69,7 @@ Thumbs.db
 # File di backup
 *.bak
 *.backup
+*.save
 
 # File di sicurezza
 admin_password.txt 
