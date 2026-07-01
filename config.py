@@ -14,7 +14,7 @@ OPCUA_TAG_PREFIX = "Siemens S7-1200/S7-1500.Tags."
 
 # Configurazione del server web
 WEB_HOST = "0.0.0.0"  # in locale usa localhost; in produzione impostare "0.0.0.0"
-WEB_PORT = 8080      # 8080 per test senza root; in produzione usare 80 (richiede sudo)
+WEB_PORT = 80        # 8080 per test senza root; in produzione usare 80 (richiede sudo)
 WEB_DEBUG = True
 
 # Configurazione del polling
