@@ -83,3 +83,18 @@ Il disco di `impiantoraee` (scheda SD da 6.7GB) era arrivato al **100% pieno**, 
 - **Doppie registrazioni**: l'utente ha segnalato che il server live crea talvolta record duplicati per la stessa commessa. Non ho trovato evidenza diretta nel DB attuale (solo `commessa_tx=0`, il placeholder "non iniziata", compare più volte — atteso). Sospetto una race condition strutturale: `commessa_esiste()` (check) e `insert_record()` (insert) non sono atomici, ed eseguono da thread diversi (poller vs richieste web tipo `imposta_commessa`). Se il problema si ripresenta, verificare lì — possibile fix: lock dedicato attorno a check+insert, oppure vincolo `UNIQUE` su `commessa_tx` con `INSERT OR IGNORE`.
 - **Working tree molto divergente da HEAD**: l'ultimo commit Git risale a luglio 2025; `server.py`, `db.py`, `opcua_reader.py` e altri hanno modifiche sostanziali non committate. Da valutare se e quando fare un commit dello stato attuale (dopo aver verificato in produzione i fix di questa sessione).
 - **`telemetria_ricostruita.db`** (il DB attivo, vedi `config.py: DATABASE_PATH`) contiene anche righe con descrizione `"Ricostruito da log - avvio lavorazione N"`, generate da `ricostruisci_db_da_log.py`: più righe `completata` per la stessa commessa sono normali lì se il lavoro è stato avviato/fermato più volte nello stesso giorno — non è un bug, non confonderlo con il punto precedente.
+
+## Handover — sessione 2026-10-27
+
+Fatto (in produzione e su `origin/dev`, commit 5433394; backup dei file sostituiti sulla Pi con suffisso `.bak-20261027*`, DB in `telemetria_ricostruita.db.bak-20261027-*`):
+
+- **Energia persa alle riconnessioni**: dopo ogni riconnessione la prima lettura OPC UA dava tutti zeri e la successiva (CRX=N, CTX=0) riscriveva `energia_iniziale_wh`. Ora `read_once()` è tutto-o-niente e `aggiorna_energia_iniziale()` non tocca commesse già `in_lavorazione`. DB corretto con `correggi_energia_iniziale.py` (11 commesse, ~30.7 kWh).
+- **Ore lavorate a zero da settembre**: il logger non vedeva più la fase CRX=CTX (dura pochi secondi). Il PLC espone le ore anche con CRX=0, CTX=N, quindi il CASO 3 ora le salva con `aggiorna_ore_commessa()` (solo se ancora a zero, senza toccare il timestamp). Storico recuperato con `recupera_ore_lavorate.py`. Non usare le righe CRX=N+1, CTX=N: i contatori possono essere già della commessa successiva.
+- **Dashboard 10× troppo piccola**: il contatore grezzo è in 1/100 kWh ma era etichettato Wh. Ora `static/index.html` e `report_energia.tpl` mostrano kWh. `static/index.html` adesso è versionato.
+- **`data_logger.service` disabilitato** (stop + disable, unit file lasciato): duplicava il polling di `opc_logger` raddoppiando le sessioni sul PLC, e non scriveva nemmeno i CSV (file di proprietà root, servizio come utente pi).
+
+Aperti:
+
+- **PLC irraggiungibile**: 192.168.1.2 risponde al ping ma rifiuta TCP su 4840 e 102. Da fine agosto arrivano solo brevi raffiche di dati al mattino. Causa non trovata: va guardato lato PLC/TIA Portal (server OPC UA attivo? limite sessioni?).
+- **`RAW_TO_KWH=100`** da confermare: dai dati risultano ~5 kW in lavorazione e ~0.45 kW a vuoto. Se la macchina ha una potenza ben diversa, il fattore potrebbe essere 10.
+- La copia Git sulla Pi (`~/opc_logger`, ramo dev) ha i file allineati al commit 5433394 ma come modifiche non committate.
