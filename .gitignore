@@ -43,9 +43,6 @@ telemetria_ricostruito.db
 *.tmp
 *.temp
 
-# Directory static vuota
-static/
-
 # File di ambiente
 .env
 .venv

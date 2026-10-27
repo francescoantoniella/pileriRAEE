@@ -49,18 +49,19 @@ class OpcuaReader(DataProvider):
         #print("Read once")
         self.connect()
         result = {"timestamp": datetime.now().isoformat() + "Z"}
-        
-        for name, node in self.tag_nodes.items():
-            try:
-                if node is not None:
-                    value = node.get_value()
-                    result[name] = value
-                else:
-                    result[name] = 0  # Valore di default se il nodo non è disponibile
-            except Exception as e:
-                print(f"Errore nella lettura del tag {name}: {e}")
-                result[name] = 0  # Valore di default in caso di errore
-        self.disconnect()
+
+        # Lettura tutto-o-niente: un tag letto a 0 per errore (es. BadNoCommunication
+        # subito dopo la riconnessione) verrebbe scambiato per un cambio di stato commessa
+        try:
+            for name, node in self.tag_nodes.items():
+                if node is None:
+                    raise RuntimeError(f"Nodo {name} non disponibile")
+                try:
+                    result[name] = node.get_value()
+                except Exception as e:
+                    raise RuntimeError(f"Errore nella lettura del tag {name}: {e}") from e
+        finally:
+            self.disconnect()
         return result
         
     def write_tags(self, nuova_commessa, nuovo_cer):

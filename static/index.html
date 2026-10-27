@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html ng-app="opcLoggerApp">
+<head>
+    <title>OPC Logger - Dashboard</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Angular.js -->
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.2/angular.min.js"></script>
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #f8f9fa;
+            padding: 2rem;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 2rem;
+            color: #343a40;
+        }
+
+        .table {
+            background-color: #ffffff;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+
+        .table th {
+            background-color: #0d6efd;
+            color: white;
+        }
+
+        .table-striped > tbody > tr:nth-of-type(odd) {
+            background-color: #f2f2f2;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: auto;
+        }
+
+        .status-card {
+            background-color: #ffffff;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-online {
+            background-color: #28a745;
+        }
+
+        .status-offline {
+            background-color: #dc3545;
+        }
+
+        .status-warning {
+            background-color: #ffc107;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 1rem;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #0d6efd;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-top: 0.5rem;
+        }
+
+        .commessa-form {
+            background-color: #ffffff;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #6c757d;
+        }
+
+        .auto-refresh {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .table tbody tr {
+            transition: background-color 0.3s ease;
+        }
+
+        .table tbody tr.updating {
+            background-color: #e3f2fd !important;
+        }
+
+        .badge {
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body ng-controller="DashboardController">
+
+
+    <!-- Menu di Navigazione -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="#/dashboard">
+                <strong>🏭 OPC Logger</strong>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#/dashboard" ng-class="{'active': currentPage === 'dashboard'}" ng-click="navigaAPagina('dashboard')">
+                            📊 Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#/reports" ng-class="{'active': currentPage === 'reports'}" ng-click="navigaAPagina('reports')">
+                            📈 Report
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/report/energia/mensile" target="_self">
+                            ⚡ Energia
+                        </a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <span class="navbar-text me-3">
+                            <div class="badge" ng-class="isAutoRefresh ? 'bg-success' : 'bg-secondary'">
+                                <span ng-show="isAutoRefresh && !isRefreshing">🔄 ON</span>
+                                <span ng-show="isAutoRefresh && isRefreshing">⚡ ...</span>
+                                <span ng-show="!isAutoRefresh">⏸️ OFF</span>
+                            </div>
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <span class="navbar-text">
+                            <span class="status-indicator" ng-class="systemStatus.connected ? 'status-online' : 'status-offline'"></span>
+                            {{systemStatus.connected ? 'Connesso' : 'Disconnesso'}}
+                        </span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container" ng-show="currentPage === 'dashboard'">
+        <h1>📊 Dashboard</h1>
+
+        <!-- Status del Sistema -->
+        <div class="status-card">
+            <h3>📊 Status Sistema</h3>
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="status-indicator" ng-class="systemStatus.connected ? 'status-online' : 'status-offline'"></div>
+                    <span ng-show="systemStatus.connected">Connesso</span>
+                    <span ng-show="!systemStatus.connected">Disconnesso</span>
+                </div>
+                <div class="col-md-3">
+                    <span><strong>Modalità:</strong> {{systemStatus.mode}}</span>
+                </div>
+                <div class="col-md-3">
+                    <span><strong>Ultimo aggiornamento:</strong> {{lastUpdate | date:'HH:mm:ss'}}</span>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-sm btn-outline-primary" ng-click="toggleAutoRefresh()">
+                        {{isAutoRefresh ? 'Disabilita' : 'Abilita'}} Auto-refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form Commessa -->
+        <div class="commessa-form">
+            <h3>🔧 Imposta Commessa</h3>
+            <form ng-submit="impostaCommessa()">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label for="commessa" class="form-label">Numero Commessa</label>
+                        <input type="number" class="form-control" id="commessa" ng-model="formData.commessa" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="cer" class="form-label">Codice CER</label>
+                        <input type="number" class="form-control" id="cer" ng-model="formData.cer" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="descrizione" class="form-label">Descrizione (opzionale)</label>
+                        <input type="text" class="form-control" id="descrizione" ng-model="formData.descrizione" placeholder="Es: Lavorazione speciale, cliente XYZ...">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">&nbsp;</label>
+                        <div>
+                            <button type="submit" class="btn btn-primary" ng-disabled="loading">
+                                Imposta Commessa
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary ms-2" ng-click="incrementaCommessa()">
+                                +1
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+            <div id="commessaStatus" ng-show="commessaStatus.message" class="mt-3">
+                <div class="alert" ng-class="commessaStatus.success ? 'alert-success' : 'alert-danger'">
+                    {{commessaStatus.message}}
+                </div>
+            </div>
+        </div>
+
+        <!-- Dati Recenti -->
+        <div class="status-card">
+            <h3>📋 Dati Recenti</h3>
+            <div class="mb-3">
+                <p class="mb-0">Mostrando <strong>{{commesse.length}}</strong> record totali</p>
+                <small class="text-muted">Tutti i record sono visualizzati con il loro stato attuale</small>
+            </div>
+
+            <div class="table-responsive" ng-show="!loading">
+                <table class="table table-striped table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Ora Chiusura</th>
+                            <th>Commessa</th>
+                            <th>Codice CER</th>
+                            <th>Descrizione</th>
+                            <th>Stato <span class="badge bg-info" title="Stato attuale della commessa">ℹ️</span></th>
+                            <th>Ore totali</th>
+                            <th>Minuti totali</th>
+                            <th>Ore lavorate</th>
+                            <th>Minuti lavorati</th>
+                            <th>Energia Iniziale (kWh) <span class="badge bg-primary" title="Energia all'inizio della lavorazione">ℹ️</span></th>
+                            <th>Energia Finale (kWh) <span class="badge bg-warning" title="Energia alla fine della lavorazione">ℹ️</span></th>
+                            <th>Energia Consumata (kWh) <span class="badge bg-success" title="Energia effettivamente consumata per questa commessa">ℹ️</span></th>
+                            <th>Progressivo (kWh) <span class="badge bg-info" title="Valore progressivo dell'energia totale">ℹ️</span></th>
+                            <th>Energia Calcolata (kWh) <span class="badge bg-success" title="Energia effettivamente consumata per questa commessa">ℹ️</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr ng-repeat="riga in commesse">
+                            <td>{{riga.timestamp_formatted || riga.timestamp}}</td>
+                            <td>{{riga.commessa_tx}}</td>
+                            <td>{{riga.codice_cer_tx}}</td>
+                            <td>{{riga.descrizione_commessa || ''}}</td>
+                            <td>
+                                <span class="badge" ng-class="riga.badge_class || 'bg-secondary'">
+                                    {{riga.icona || '❓'}} {{riga.stato_visivo || 'Sconosciuto'}}
+                                </span>
+                            </td>
+                            <td>{{riga.ore_totali_commessa_tx}}</td>
+                            <td>{{riga.minuti_totali_commessa_tx}}</td>
+                            <td>{{riga.ore_lavorate_commessa_tx}}</td>
+                            <td>{{riga.minuti_lavorati_commessa_tx}}</td>
+                            <td><span class="badge bg-primary">{{kwh(riga.energia_iniziale_wh) | number:2}}</span></td>
+                            <td><span class="badge bg-warning">{{kwh(riga.energia_finale_wh) | number:2}}</span></td>
+                            <td><span class="badge bg-success"><strong>{{kwh(riga.energia_consumata_wh) | number:2}}</strong></span></td>
+                            <td>{{kwh(riga.progressivo_wh || riga.potenza_consumata_tx) | number:2}}</td>
+                            <td><strong>{{riga.energia_calcolata_kwh || 0}}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="loading" ng-show="loading">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Caricamento...</span>
+                </div>
+                <p>Caricamento dati...</p>
+            </div>
+
+            <div ng-show="!loading && commesse.length === 0" class="text-center text-muted">
+                <p>Nessun dato disponibile</p>
+            </div>
+        </div>
+
+        <!-- Statistiche Stati -->
+        <div class="commessa-form">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3>📊 Statistiche Stati Commesse</h3>
+                <button class="btn btn-sm btn-outline-primary" ng-click="refreshData()">
+                    🔄 Aggiorna Stati
+                </button>
+            </div>
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value">{{stats.completate}}</div>
+                        <div class="stat-label">✅ Completate</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value">{{stats.lavorazione}}</div>
+                        <div class="stat-label">🔄 In Lavorazione</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value">{{stats.preparazione}}</div>
+                        <div class="stat-label">⏳ In Preparazione</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value">{{stats.attesa}}</div>
+                        <div class="stat-label">⏸️ In Attesa</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistiche Energia -->
+        <div class="commessa-form">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3>⚡ Statistiche Energia Recenti</h3>
+                <button class="btn btn-sm btn-outline-primary" ng-click="refreshStats()">
+                    🔄 Aggiorna
+                </button>
+            </div>
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value">{{energyStats.energia_totale_kwh | number:3}}</div>
+                        <div class="stat-label">Energia Totale (kWh)</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value">{{energyStats.energia_media_kwh | number:3}}</div>
+                        <div class="stat-label">Energia Media (kWh)</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value">{{kwh(energyStats.progressivo_massimo_wh) | number:2}}</div>
+                        <div class="stat-label">Progressivo Attuale (kWh)</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value">{{commesse.length}}</div>
+                        <div class="stat-label">Commesse Mostrate</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form Energia -->
+        <div class="commessa-form">
+            <h3>⚡ Calcolo Energia</h3>
+            <form ng-submit="calcolaEnergia()">
+                <div class="row">
+                    <div class="col-md-8">
+                        <label for="commessa-energia" class="form-label">Numero Commessa</label>
+                        <input type="number" class="form-control" id="commessa-energia" ng-model="energiaForm.commessa" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">&nbsp;</label>
+                        <div>
+                            <button type="submit" class="btn btn-success" ng-disabled="loading">
+                                Calcola Energia
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+            <div id="energiaStatus" ng-show="energiaStatus.message" class="mt-3">
+                <div class="alert alert-success" ng-show="energiaStatus.success">
+                    <h5>⚡ Energia Commessa {{energiaStatus.commessa}}</h5>
+                    <p><strong>Energia consumata:</strong> {{energiaStatus.energia_kwh | number:2}} kWh</p>
+                    <p><strong>Progressivo precedente:</strong> {{kwh(energiaStatus.progressivo_precedente) | number:2}} kWh</p>
+                    <p><strong>Progressivo finale:</strong> {{kwh(energiaStatus.progressivo_finale) | number:2}} kWh</p>
+                    <p><strong>Descrizione:</strong> {{energiaStatus.descrizione}}</p>
+                    <p><strong>Timestamp:</strong> {{energiaStatus.timestamp}}</p>
+                </div>
+                <div class="alert alert-danger" ng-show="!energiaStatus.success">
+                    {{energiaStatus.message}}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagina Report -->
+    <div class="container" ng-show="currentPage === 'reports'">
+        <h1>📈 Report Energetici</h1>
+
+        <!-- Report Giornaliero -->
+        <div class="status-card">
+            <h3>📅 Report Giornaliero</h3>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="report-date" class="form-label">Seleziona Data</label>
+                    <input type="date" class="form-control" id="report-date" ng-model="reportData.data" ng-change="caricaReportGiornaliero()">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">&nbsp;</label>
+                    <div>
+                        <button class="btn btn-primary" ng-click="caricaReportGiornaliero()" ng-disabled="loadingReport">
+                            <span ng-show="loadingReport" class="spinner-border spinner-border-sm"></span>
+                            📊 Genera Report
+                        </button>
+                        <button class="btn btn-outline-secondary ms-2" ng-click="caricaReportOggi()" ng-disabled="loadingReport">
+                            📅 Oggi
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Risultati Report -->
+            <div ng-show="reportData.report" class="mt-4">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-value text-primary">{{reportData.report.commesse_completate}}</div>
+                            <div class="stat-label">Commesse Completate</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-value text-success">{{reportData.report.energia_lavorazioni_kwh}}</div>
+                            <div class="stat-label">Energia Lavorazioni (kWh)</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-value text-warning">{{reportData.report.energia_standby_kwh}}</div>
+                            <div class="stat-label">Energia Standby (kWh)</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-value text-info">{{reportData.report.energia_totale_kwh}}</div>
+                            <div class="stat-label">Energia Totale (kWh)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-value">{{reportData.report.ore_totali}}</div>
+                            <div class="stat-label">Ore Totali</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-value">{{reportData.report.minuti_totali}}</div>
+                            <div class="stat-label">Minuti Totali</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-value">{{reportData.report.ore_lavorazione}}</div>
+                            <div class="stat-label">Ore Lavorate</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-value">{{reportData.report.minuti_lavorazione}}</div>
+                            <div class="stat-label">Minuti Lavorati</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dettagli -->
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>📊 Dettagli Energetici</h5>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Prima lettura:</strong> {{kwh(reportData.report.prima_lettura_wh) | number:2}} kWh</p>
+                                <p><strong>Ultima lettura:</strong> {{kwh(reportData.report.ultima_lettura_wh) | number:2}} kWh</p>
+                                <p><strong>Totale letture:</strong> {{reportData.report.totale_letture}}</p>
+                                <p><strong>Ore lavorazione:</strong> {{reportData.report.ore_lavorazione}}</p>
+                                <p><strong>Minuti lavorazione:</strong> {{reportData.report.minuti_lavorazione}}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>⚡ Distribuzione Energia</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="progress mb-2">
+                                    <div class="progress-bar bg-success" role="progressbar" 
+                                         ng-style="{width: (reportData.report.energia_totale_wh ? (reportData.report.energia_lavorazioni_wh / reportData.report.energia_totale_wh * 100) : 0) + '%'}">
+                                        Lavorazioni: {{(reportData.report.energia_lavorazioni_wh / reportData.report.energia_totale_wh * 100) | number:1}}%
+                                    </div>
+                                </div>
+                                <div class="progress">
+                                    <div class="progress-bar bg-warning" role="progressbar" 
+                                         ng-style="{width: (reportData.report.energia_totale_wh ? (reportData.report.energia_standby_wh / reportData.report.energia_totale_wh * 100) : 0) + '%'}">
+                                        Standby: {{(reportData.report.energia_standby_wh / reportData.report.energia_totale_wh * 100) | number:1}}%
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dettaglio Commesse -->
+                <div class="mt-4" ng-show="reportData.report.commesse_dettaglio.length > 0">
+                    <h5>📋 Dettaglio Commesse</h5>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Commessa</th>
+                                    <th>Energia Iniziale (kWh)</th>
+                                    <th>Energia Finale (kWh)</th>
+                                    <th>Energia Consumata (kWh)</th>
+                                    <th>Descrizione</th>
+                                    <th>Timestamp</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr ng-repeat="commessa in reportData.report.commesse_dettaglio">
+                                    <td>{{commessa.commessa_tx}}</td>
+                                    <td>{{kwh(commessa.energia_iniziale_wh) | number:2}}</td>
+                                    <td>{{kwh(commessa.energia_finale_wh) | number:2}}</td>
+                                    <td><strong>{{kwh(commessa.energia_consumata_wh) | number:2}}</strong></td>
+                                    <td>{{commessa.descrizione_commessa || '-'}}</td>
+                                    <td>{{commessa.timestamp}}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Messaggio di errore -->
+            <div ng-show="reportData.error" class="alert alert-danger mt-3">
+                {{reportData.error}}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var app = angular.module('opcLoggerApp', []);
+
+        app.controller('DashboardController', function($scope, $http, $interval) {
+            // Variabili di stato
+            $scope.commesse = [];
+            $scope.loading = false;
+            $scope.isAutoRefresh = true;
+            $scope.isRefreshing = false;
+            $scope.lastUpdate = new Date();
+            $scope.currentPage = 'dashboard'; // Gestione navigazione
+            $scope.systemStatus = {
+                connected: false,
+                mode: 'unknown'
+            };
+            
+            // Variabili per i report
+            $scope.reportData = {
+                data: new Date(), // usare Date object per input[type=date]
+                report: null,
+                error: null
+            };
+            $scope.loadingReport = false;
+            
+            // Form data
+            $scope.formData = {
+                commessa: null,
+                cer: 160214,
+                descrizione: ''
+            };
+            
+            $scope.energiaForm = {
+                commessa: null
+            };
+            
+            // Status messages
+            $scope.commessaStatus = { message: '', success: false };
+            $scope.energiaStatus = { message: '', success: false };
+
+            // Il contatore del PLC è in centesimi di kWh (RAW_TO_KWH = 100 in config.py)
+            $scope.kwh = function(raw) { return (raw || 0) / 100; };
+            
+            // Statistiche
+            $scope.stats = {
+                completate: 0,
+                lavorazione: 0,
+                preparazione: 0,
+                attesa: 0
+            };
+            
+            $scope.energyStats = {
+                energia_totale_kwh: 0,
+                energia_media_kwh: 0,
+                progressivo_massimo_wh: 0
+            };
+
+            // Funzioni principali
+            $scope.refreshData = function() {
+                // Non mostrare loading per auto-refresh per evitare flash della tabella
+                if (!$scope.isAutoRefresh) {
+                    $scope.loading = true;
+                } else {
+                    $scope.isRefreshing = true;
+                }
+                
+                $http.get('/api/commesse/recenti')
+                    .then(function(response) {
+                        // Aggiorna i dati senza cancellare la tabella
+                        $scope.commesse = response.data.commesse || [];
+                        $scope.lastUpdate = new Date();
+                        $scope.calcolaStatistiche();
+                        $scope.loading = false;
+                        $scope.isRefreshing = false;
+                        
+                        // API risponde correttamente = connesso
+                        $scope.systemStatus.connected = true;
+                    })
+                    .catch(function(error) {
+                        console.error('Errore nel caricamento dati:', error);
+                        $scope.loading = false;
+                        $scope.isRefreshing = false;
+                        
+                        // Errore API = disconnesso
+                        $scope.systemStatus.connected = false;
+                    });
+            };
+
+            $scope.refreshStats = function() {
+                $http.get('/api/energia/statistiche')
+                    .then(function(response) {
+                        if (response.data.success) {
+                            $scope.energyStats = response.data.statistiche;
+                        }
+                        // API risponde = sistema connesso
+                        $scope.systemStatus.connected = true;
+                    })
+                    .catch(function(error) {
+                        console.error('Errore nel caricamento statistiche:', error);
+                        // Errore API = sistema disconnesso
+                        $scope.systemStatus.connected = false;
+                    });
+            };
+
+            $scope.calcolaStatistiche = function() {
+                $scope.stats = {
+                    completate: 0,
+                    lavorazione: 0,
+                    preparazione: 0,
+                    attesa: 0
+                };
+
+                $scope.commesse.forEach(function(commessa) {
+                    var stato = commessa.stato_visivo;
+                    if (stato === 'Completata') {
+                        $scope.stats.completate++;
+                    } else if (stato === 'In Lavorazione') {
+                        $scope.stats.lavorazione++;
+                    } else if (stato === 'In Preparazione') {
+                        $scope.stats.preparazione++;
+                    } else if (stato === 'In Attesa') {
+                        $scope.stats.attesa++;
+                    }
+                });
+            };
+
+            $scope.impostaCommessa = function() {
+                if (!$scope.formData.commessa || !$scope.formData.cer) {
+                    $scope.commessaStatus = {
+                        message: 'Inserisci sia la commessa che il codice CER',
+                        success: false
+                    };
+                    return;
+                }
+
+                $scope.loading = true;
+                $http.post('/api/commessa/imposta', {
+                    commessa: parseInt($scope.formData.commessa),
+                    cer: parseInt($scope.formData.cer),
+                    descrizione: $scope.formData.descrizione || ''
+                })
+                .then(function(response) {
+                    if (response.data.success) {
+                        $scope.commessaStatus = {
+                            message: response.data.message || 'Commessa impostata con successo!',
+                            success: true
+                        };
+                        $scope.formData.commessa = parseInt($scope.formData.commessa) + 1;
+                        $scope.refreshData();
+                    } else {
+                        $scope.commessaStatus = {
+                            message: 'Errore: ' + (response.data.error || 'Errore sconosciuto'),
+                            success: false
+                        };
+                    }
+                    $scope.loading = false;
+                    
+                    // API risponde = sistema connesso
+                    $scope.systemStatus.connected = true;
+                })
+                .catch(function(error) {
+                    $scope.commessaStatus = {
+                        message: 'Errore di connessione',
+                        success: false
+                    };
+                    $scope.loading = false;
+                    
+                    // Errore API = sistema disconnesso
+                    $scope.systemStatus.connected = false;
+                });
+            };
+
+            $scope.calcolaEnergia = function() {
+                if (!$scope.energiaForm.commessa) {
+                    $scope.energiaStatus = {
+                        message: 'Inserisci il numero della commessa',
+                        success: false
+                    };
+                    return;
+                }
+
+                $http.get('/api/commessa/energia/' + $scope.energiaForm.commessa)
+                    .then(function(response) {
+                        if (response.data.success) {
+                            $scope.energiaStatus = {
+                                success: true,
+                                commessa: response.data.commessa_tx,
+                                energia_wh: response.data.energia_consumata_wh,
+                                energia_kwh: response.data.energia_consumata_kwh,
+                                progressivo_precedente: response.data.energia_iniziale_wh,
+                                progressivo_finale: response.data.energia_finale_wh,
+                                descrizione: response.data.descrizione || 'Nessuna descrizione',
+                                timestamp: response.data.timestamp
+                            };
+                        } else {
+                            $scope.energiaStatus = {
+                                message: 'Errore: ' + (response.data.error || 'Errore sconosciuto'),
+                                success: false
+                            };
+                        }
+                    })
+                    .catch(function(error) {
+                        $scope.energiaStatus = {
+                            message: 'Errore di connessione',
+                            success: false
+                        };
+                    });
+            };
+
+            $scope.incrementaCommessa = function() {
+                $scope.formData.commessa = ($scope.formData.commessa || 0) + 1;
+            };
+
+            // Funzioni per i report
+            function formatDateYMD(dateObj) {
+                var y = dateObj.getFullYear();
+                var m = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+                var d = dateObj.getDate().toString().padStart(2, '0');
+                return y + '-' + m + '-' + d;
+            }
+
+            $scope.caricaReportGiornaliero = function() {
+                if (!$scope.reportData.data) {
+                    $scope.reportData.error = 'Seleziona una data';
+                    return;
+                }
+
+                $scope.loadingReport = true;
+                $scope.reportData.error = null;
+
+                var dataParam = ($scope.reportData.data instanceof Date)
+                    ? formatDateYMD($scope.reportData.data)
+                    : $scope.reportData.data;
+
+                $http.get('/api/report/giornaliero/' + dataParam)
+                    .then(function(response) {
+                        if (response.data.success) {
+                            $scope.reportData.report = response.data.report;
+                            $scope.systemStatus.connected = true;
+                        } else {
+                            $scope.reportData.error = response.data.error || 'Errore nel caricamento del report';
+                        }
+                        $scope.loadingReport = false;
+                    })
+                    .catch(function(error) {
+                        $scope.reportData.error = 'Errore di connessione';
+                        $scope.systemStatus.connected = false;
+                        $scope.loadingReport = false;
+                    });
+            };
+
+            $scope.caricaReportOggi = function() {
+                $scope.loadingReport = true;
+                $scope.reportData.error = null;
+
+                $http.get('/api/report/oggi')
+                    .then(function(response) {
+                        if (response.data.success) {
+                            $scope.reportData.report = response.data.report;
+                            try {
+                                $scope.reportData.data = new Date(response.data.report.data);
+                            } catch (_) {}
+                            $scope.systemStatus.connected = true;
+                        } else {
+                            $scope.reportData.error = response.data.error || 'Errore nel caricamento del report';
+                        }
+                        $scope.loadingReport = false;
+                    })
+                    .catch(function(error) {
+                        $scope.reportData.error = 'Errore di connessione';
+                        $scope.systemStatus.connected = false;
+                        $scope.loadingReport = false;
+                    });
+            };
+
+            // Funzioni di navigazione
+            $scope.navigaAPagina = function(pagina) {
+                $scope.currentPage = pagina;
+                if (pagina === 'reports' && !$scope.reportData.report) {
+                    $scope.caricaReportOggi(); // Carica automaticamente il report di oggi
+                }
+            };
+
+            // Gestione hash nella URL
+            $scope.$watch(function() {
+                return window.location.hash;
+            }, function(newHash) {
+                if (newHash === '#/dashboard') {
+                    $scope.currentPage = 'dashboard';
+                } else if (newHash === '#/reports') {
+                    $scope.currentPage = 'reports';
+                }
+            });
+
+            $scope.caricaUltimaCommessa = function() {
+                $http.get('/api/commessa/ultima')
+                    .then(function(response) {
+                        if (response.data.ultima_commessa !== undefined && response.data.ultima_commessa > 0) {
+                            // Precarica l'ultima commessa + 1
+                            $scope.formData.commessa = response.data.ultima_commessa + 1;
+                            console.log('Ultima commessa caricata:', response.data.ultima_commessa, '→ Nuova:', $scope.formData.commessa);
+                        } else {
+                            // Se non ci sono commesse, inizia da 1
+                            $scope.formData.commessa = 1;
+                            console.log('Nessuna commessa precedente trovata, inizio da 1');
+                        }
+                        // API risponde = sistema connesso
+                        $scope.systemStatus.connected = true;
+                    })
+                    .catch(function(error) {
+                        console.error('Errore nel caricamento ultima commessa:', error);
+                        // In caso di errore, inizia da 1
+                        $scope.formData.commessa = 1;
+                        // Errore API = sistema disconnesso
+                        $scope.systemStatus.connected = false;
+                    });
+            };
+
+            $scope.toggleAutoRefresh = function() {
+                $scope.isAutoRefresh = !$scope.isAutoRefresh;
+                if ($scope.isAutoRefresh) {
+                    startAutoRefresh();
+                } else {
+                    stopAutoRefresh();
+                }
+            };
+
+            // Auto-refresh
+            var autoRefreshInterval;
+            
+            function startAutoRefresh() {
+                stopAutoRefresh();
+                autoRefreshInterval = $interval(function() {
+                    $scope.refreshData();
+                    $scope.refreshStats();
+                }, 5000); // Aggiorna ogni 5 secondi
+            }
+            
+            function stopAutoRefresh() {
+                if (autoRefreshInterval) {
+                    $interval.cancel(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+            }
+
+            // Inizializzazione
+            $scope.refreshData();
+            $scope.refreshStats();
+            $scope.caricaUltimaCommessa(); // Precarica l'ultima commessa + 1
+            
+            if ($scope.isAutoRefresh) {
+                startAutoRefresh();
+            }
+
+            // Cleanup
+            $scope.$on('$destroy', function() {
+                stopAutoRefresh();
+            });
+        });
+    </script>
+</body>
+</html>

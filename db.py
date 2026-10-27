@@ -1,3 +1,5 @@
+import csv
+import os
 import sqlite3
 import threading
 from datetime import date, timedelta
@@ -123,8 +125,19 @@ class TelemetriaDB:
         self.close()
 
     def aggiorna_energia_iniziale(self, commessa_rx, energia_iniziale_wh):
-        """Aggiorna l'energia iniziale per una commessa specifica"""
+        """Aggiorna l'energia iniziale per una commessa specifica.
+        Restituisce False se la commessa era già in lavorazione (nessuna modifica)."""
         self.open()
+        # Commessa già avviata: una riconnessione o un riavvio non deve azzerarne il conteggio
+        self.cur.execute('''
+            SELECT stato_lavorazione FROM telemetria
+            WHERE commessa_tx = ? ORDER BY timestamp DESC LIMIT 1
+        ''', (commessa_rx,))
+        riga = self.cur.fetchone()
+        if riga and riga[0] == 'in_lavorazione':
+            self.close()
+            return False
+
         # Prima prova a trovare un record con commessa_tx = commessa_rx (aggiorna solo il più recente)
         self.cur.execute('''
             UPDATE telemetria 
@@ -140,9 +153,10 @@ class TelemetriaDB:
                 SET energia_iniziale_wh = ?, stato_lavorazione = 'in_lavorazione', commessa_tx = ?
                 WHERE rowid = (SELECT rowid FROM telemetria WHERE commessa_tx = 0 ORDER BY timestamp DESC LIMIT 1)
             ''', (energia_iniziale_wh, commessa_rx))
-        
+
         self.conn.commit()
         self.close()
+        return True
 
     def aggiorna_energia_finale(self, commessa_tx, energia_finale_wh):
         """Aggiorna l'energia finale e calcola la differenza per una commessa specifica"""
@@ -215,6 +229,20 @@ class TelemetriaDB:
         risultati = [dict(zip(colonne, r)) for r in righe]
         self.close()
         return risultati
+
+    def ultima_commessa_in_preparazione(self):
+        """Restituisce l'ultimo record con stato 'preparazione' (candidato da rimandare al PLC), o None"""
+        self.open()
+        self.cur.execute('''
+            SELECT * FROM telemetria
+            WHERE stato_lavorazione = 'preparazione'
+            ORDER BY timestamp DESC
+            LIMIT 1
+        ''')
+        riga = self.cur.fetchone()
+        colonne = [desc[0] for desc in self.cur.description]
+        self.close()
+        return dict(zip(colonne, riga)) if riga else None
 
     def leggi_tutti_con_stato(self, n=50):
         """Legge tutti i record con informazioni sullo stato delle commesse"""
@@ -452,6 +480,8 @@ class TelemetriaDB:
                 energia_iniziale_wh,
                 energia_finale_wh,
                 energia_consumata_wh,
+                ore_lavorate_commessa_tx,
+                minuti_lavorati_commessa_tx,
                 timestamp,
                 descrizione_commessa
             FROM telemetria 
@@ -490,13 +520,19 @@ class TelemetriaDB:
         
         result = self.cur.fetchone()
         
+        # Il DB ha un solo record per commessa: le letture reali del contatore sono nel CSV del giorno
+        letture_csv = self._letture_contatore_giorno(data)
+        if letture_csv:
+            result = (min(letture_csv), max(letture_csv), len(letture_csv))
+
         if result and result[0] is not None and result[1] is not None:
             prima_lettura = result[0]
             ultima_lettura = result[1]
             totale_letture = result[2]
             
-            # Calcola energia standby
-            energia_totale_giorno = ultima_lettura - prima_lettura
+            # Calcola energia standby. Una commessa può proseguire oltre l'ultima lettura
+            # registrata (es. fino al mattino dopo): il totale non può essere inferiore
+            energia_totale_giorno = max(ultima_lettura - prima_lettura, energia_lavorazioni)
             energia_standby = energia_totale_giorno - energia_lavorazioni
             
             # Statistiche aggiuntive (somma delle commesse completate)
@@ -529,6 +565,23 @@ class TelemetriaDB:
             'commesse_dettaglio': commesse
         }
 
+    def _letture_contatore_giorno(self, data):
+        """Valori del contatore energia (>0) dal log CSV data_YYYY-MM-DD.log, se presente."""
+        path = os.path.join(os.path.dirname(self.db_path), f"data_{data}.log")
+        letture = []
+        try:
+            with open(path, newline='', encoding='utf-8') as f:
+                for riga in csv.DictReader(f):
+                    try:
+                        valore = int(float(riga['Potenza consumata TX']))
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    if valore > 0:
+                        letture.append(valore)
+        except OSError:
+            pass
+        return letture
+
     def aggiorna_dati_operativi(self, commessa_tx, new_data):
         """Aggiorna solo i dati operativi senza sovrascrivere energia iniziale e descrizione"""
         self.open()
@@ -560,6 +613,36 @@ class TelemetriaDB:
         self.conn.commit()
         self.close()
         return True
+
+    def aggiorna_ore_commessa(self, commessa_tx, new_data):
+        """Salva ore/minuti di una commessa chiusa se non registrati in fase CRX=CTX.
+
+        Il PLC espone i contatori ore anche a commessa chiusa (CRX=0, CTX=N); tocca solo
+        le quattro colonne e solo se ancora a zero, senza riscrivere il timestamp.
+        """
+        valori = (
+            new_data['Ore totali commessa TX'],
+            new_data['Minuti totali commessa TX'],
+            new_data['Ore lavorate commessa TX'],
+            new_data['Minuti lavorati commessa TX'],
+        )
+        if not any(valori):
+            return False
+        self.open()
+        self.cur.execute('''
+            UPDATE telemetria SET
+                ore_totali_commessa_tx = ?,
+                minuti_totali_commessa_tx = ?,
+                ore_lavorate_commessa_tx = ?,
+                minuti_lavorati_commessa_tx = ?
+            WHERE commessa_tx = ? AND stato_lavorazione = 'completata'
+              AND COALESCE(ore_totali_commessa_tx, 0) = 0 AND COALESCE(minuti_totali_commessa_tx, 0) = 0
+              AND COALESCE(ore_lavorate_commessa_tx, 0) = 0 AND COALESCE(minuti_lavorati_commessa_tx, 0) = 0
+        ''', (*valori, commessa_tx))
+        aggiornati = self.cur.rowcount
+        self.conn.commit()
+        self.close()
+        return aggiornati > 0
 
     def aggiorna_descrizione_commessa(self, commessa_tx, nuova_descrizione):
         """Aggiorna la descrizione di una commessa specifica"""

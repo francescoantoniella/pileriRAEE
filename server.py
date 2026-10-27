@@ -1064,8 +1064,10 @@ def on_change(new_values, old_values):
         
         # Aggiorna il record esistente con energia iniziale e stato
         try:
-            db.aggiorna_energia_iniziale(crx, energia_attuale)
-            print(f"⚡ Energia iniziale registrata: {energia_attuale} Wh per commessa {crx}")
+            if db.aggiorna_energia_iniziale(crx, energia_attuale):
+                print(f"⚡ Energia iniziale registrata: {energia_attuale} Wh per commessa {crx}")
+            else:
+                print(f"ℹ️ Commessa {crx} già in lavorazione, energia iniziale invariata")
         except Exception as e:
             print(f"❌ Errore nella registrazione energia iniziale: {e}")
     
@@ -1110,8 +1112,9 @@ def on_change(new_values, old_values):
                         except Exception as e:
                             print(f"⚠️ Errore invio automatico al PLC: {e}")
 
-                    # Crea comunque il record in stato "preparazione" anche se l'invio al PLC manca
-                    if not db.commessa_esiste(nuova_commessa) and sent:
+                    # Crea comunque il record in stato "preparazione" anche se l'invio al PLC manca,
+                    # cosi' resta in DB da poter ri-inviare al PLC alla prossima riconnessione
+                    if not db.commessa_esiste(nuova_commessa):
                         try:
                             timestamp = datetime.datetime.now().isoformat()
                             nuovo_record = {
@@ -1138,6 +1141,14 @@ def on_change(new_values, old_values):
                 print(f"⚠️ Commessa {ctx} non trovata in lavorazione")
         except Exception as e:
             print(f"❌ Errore nella registrazione energia finale: {e}")
+
+        # La fase CRX=CTX dura pochi secondi e può sfuggire al polling:
+        # le ore restano leggibili finché CTX=N, quindi si salvano anche qui
+        try:
+            if db.aggiorna_ore_commessa(ctx, new_values):
+                print(f"⏱️ Ore lavorate registrate per commessa {ctx}")
+        except Exception as e:
+            print(f"❌ Errore nella registrazione ore commessa {ctx}: {e}")
     
     # CASO 4: ALTRI STATI (preparazione, attesa, ecc.)
     else:

@@ -66,7 +66,7 @@
                 <h5>Commesse completate</h5>
                 <div class="display-6">{{report['commesse_completate']}}</div>
                 <div class="text-muted">Nel periodo selezionato</div>
-                <div class="mt-3 small text-muted">Prima lettura: {{report['prima_lettura_wh']}} Wh · Ultima: {{report['ultima_lettura_wh']}} Wh · Letture: {{report['totale_letture']}}</div>
+                <div class="mt-3 small text-muted">Prima lettura: {{"%.2f" % (report['prima_lettura_wh'] / 100.0)}} kWh · Ultima: {{"%.2f" % (report['ultima_lettura_wh'] / 100.0)}} kWh · Letture: {{report['totale_letture']}}</div>
             </div>
         </div>
     </div>
@@ -90,7 +90,7 @@
                         <tr>
                             <td>{{c['timestamp']}}</td>
                             <td>{{c['commessa_tx']}}</td>
-                            <td>{{c['energia_consumata_wh']}}</td>
+                            <td>{{c['energia_consumata_wh'] * 10}}</td>
                             <td>{{"%.3f" % (c['energia_consumata_wh']/100.0)}}</td>
                             <td>{{c.get('descrizione_commessa','')}}</td>
                         </tr>
