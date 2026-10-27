@@ -69,7 +69,7 @@ def test_opcua_connection():
         print("📖 Lettura dati...")
         reader.start_polling()
         while 1:
-            pass
+            time.sleep(1)
         
     except Exception as e:
         print(f"❌ Errore: {e}")
