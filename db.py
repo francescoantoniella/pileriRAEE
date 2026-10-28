@@ -8,6 +8,67 @@ try:
     from config import RAW_TO_KWH
 except ImportError:
     RAW_TO_KWH = 100
+try:
+    from config import POTENZA_ATTESA_KW
+except ImportError:
+    POTENZA_ATTESA_KW = 0.41
+
+# Un salto del contatore tra due commesse oltre questa soglia (20 kWh) è una discontinuità dei dati
+# (cambio numerazione commesse, record ricostruiti), non macchina accesa senza commessa
+SALTO_MAX_FUORI_COMMESSA = 20 * RAW_TO_KWH
+
+
+def _minuti(ore, minuti):
+    return (ore or 0) * 60 + (minuti or 0)
+
+
+def ripartisci_energia(commesse):
+    """Divide l'energia delle commesse in lavorazione e base (macchina accesa ma ferma).
+
+    Base di una commessa = POTENZA_ATTESA_KW × (tempo aperta − tempo lavorato), al massimo la sua energia;
+    si aggiunge l'energia consumata tra una commessa e l'altra. Le commesse senza ore dal PLC
+    non si possono ripartire e restano a parte. Valori grezzi del contatore; arricchisce ogni
+    commessa con energia_base_wh / energia_lavorazione_wh (None se non ripartibile).
+    """
+    lavorazione = base = non_ripartita = n_non_ripartite = 0
+    for c in commesse:
+        energia = c.get('energia_consumata_wh') or 0
+        aperta = _minuti(c.get('ore_totali_commessa_tx'), c.get('minuti_totali_commessa_tx'))
+        lavorata = _minuti(c.get('ore_lavorate_commessa_tx'), c.get('minuti_lavorati_commessa_tx'))
+        if aperta <= 0:
+            c['energia_base_wh'] = c['energia_lavorazione_wh'] = None
+            non_ripartita += energia
+            n_non_ripartite += energia > 0
+            continue
+        b = min(round(POTENZA_ATTESA_KW * max(aperta - lavorata, 0) / 60 * RAW_TO_KWH), max(energia, 0))
+        c['energia_base_wh'], c['energia_lavorazione_wh'] = b, energia - b
+        base += b
+        lavorazione += energia - b
+
+    fuori_commessa, finale_prec = 0, None
+    for c in sorted(commesse, key=lambda c: c.get('energia_iniziale_wh') or 0):
+        iniziale, finale = c.get('energia_iniziale_wh') or 0, c.get('energia_finale_wh') or 0
+        if finale_prec is not None and 0 < iniziale - finale_prec <= SALTO_MAX_FUORI_COMMESSA:
+            fuori_commessa += iniziale - finale_prec
+        if finale:
+            finale_prec = max(finale, finale_prec or 0)
+
+    energia_commesse = sum(c.get('energia_consumata_wh') or 0 for c in commesse)
+    valori = {
+        'energia_commesse': energia_commesse,
+        'energia_lavorazioni': lavorazione,
+        'energia_standby': base + fuori_commessa,
+        'energia_base_commesse': base,
+        'energia_fuori_commessa': fuori_commessa,
+        'energia_non_ripartita': non_ripartita,
+        'energia_totale': energia_commesse + fuori_commessa,
+    }
+    risultato = {'commesse_non_ripartite': n_non_ripartite, 'potenza_attesa_kw': POTENZA_ATTESA_KW}
+    for k, v in valori.items():
+        risultato[f'{k}_wh'] = v
+        risultato[f'{k}_kwh'] = round(v / RAW_TO_KWH, 3)
+    return risultato
+
 
 class TelemetriaDB:
     def __init__(self, db_path='telemetria_ricostruita.db'):
@@ -418,8 +479,9 @@ class TelemetriaDB:
             return {
                 'totale_record': statistiche[0],
                 'commesse_uniche': statistiche[1],
-                'ore_totali_lavorate': statistiche[2] or 0,
-                'minuti_totali_lavorati': statistiche[3] or 0,
+                # minuti oltre 60 riportati nelle ore
+                'ore_totali_lavorate': _minuti(statistiche[2], statistiche[3]) // 60,
+                'minuti_totali_lavorati': _minuti(statistiche[2], statistiche[3]) % 60,
                 'energia_totale_consumata': round(raw_tot / RAW_TO_KWH, 3),
                 'energia_media_consumata': round(raw_avg / RAW_TO_KWH, 3),
             }
@@ -451,8 +513,9 @@ class TelemetriaDB:
             return {
                 'totale_record': statistiche[0],
                 'commesse_uniche': statistiche[1],
-                'ore_totali_lavorate': statistiche[2] or 0,
-                'minuti_totali_lavorati': statistiche[3] or 0,
+                # minuti oltre 60 riportati nelle ore
+                'ore_totali_lavorate': _minuti(statistiche[2], statistiche[3]) // 60,
+                'minuti_totali_lavorati': _minuti(statistiche[2], statistiche[3]) % 60,
                 'energia_totale_consumata': round(raw_tot / RAW_TO_KWH, 3),
                 'energia_media_consumata': round(raw_avg / RAW_TO_KWH, 3),
             }
@@ -469,101 +532,63 @@ class TelemetriaDB:
         self.close()
         return result[0] > 0 if result else False
 
-    def calcola_report_giornaliero(self, data):
-        """Calcola il report energetico giornaliero"""
-        self.open()
-        
-        # Ottieni tutte le commesse completate nella giornata
-        self.cur.execute('''
-            SELECT 
+    _COLONNE_REPORT = '''
                 commessa_tx,
                 energia_iniziale_wh,
                 energia_finale_wh,
                 energia_consumata_wh,
+                ore_totali_commessa_tx,
+                minuti_totali_commessa_tx,
                 ore_lavorate_commessa_tx,
                 minuti_lavorati_commessa_tx,
                 timestamp,
                 descrizione_commessa
-            FROM telemetria 
-            WHERE DATE(timestamp) = ? AND stato_lavorazione = 'completata'
-            ORDER BY timestamp ASC
-        ''', (data,))
-        
-        commesse_completate = self.cur.fetchall()
-        colonne = [desc[0] for desc in self.cur.description]
-        commesse = [dict(zip(colonne, r)) for r in commesse_completate]
-        
-        # Calcola energia totale lavorazioni
-        energia_lavorazioni = sum(c.get('energia_consumata_wh', 0) for c in commesse)
+    '''
 
-        # Calcola ore/minuti totali (sommando tutte le letture del giorno, indipendentemente dallo stato)
-        self.cur.execute('''
-            SELECT 
-                SUM(ore_totali_commessa_tx) as ore_totali,
-                SUM(minuti_totali_commessa_tx) as minuti_totali
-            FROM telemetria 
-            WHERE DATE(timestamp) = ?
-        ''', (data,))
-        tmp = self.cur.fetchone()
-        ore_totali = tmp[0] or 0 if tmp else 0
-        minuti_totali = tmp[1] or 0 if tmp else 0
-        
-        # Ottieni prima e ultima lettura della giornata
-        self.cur.execute('''
-            SELECT 
-                MIN(potenza_consumata_tx) as prima_lettura,
-                MAX(potenza_consumata_tx) as ultima_lettura,
-                COUNT(*) as totale_letture
-            FROM telemetria 
-            WHERE DATE(timestamp) = ?
-        ''', (data,))
-        
-        result = self.cur.fetchone()
-        
+    def _commesse_completate(self, data_inizio, data_fine):
+        self.open()
+        self.cur.execute(f'''
+            SELECT {self._COLONNE_REPORT}
+            FROM telemetria
+            WHERE DATE(timestamp) BETWEEN ? AND ? AND stato_lavorazione = 'completata'
+            ORDER BY timestamp ASC
+        ''', (data_inizio, data_fine))
+        colonne = [desc[0] for desc in self.cur.description]
+        commesse = [dict(zip(colonne, r)) for r in self.cur.fetchall()]
+        self.close()
+        return commesse
+
+    def calcola_report_giornaliero(self, data):
+        """Calcola il report energetico giornaliero"""
+        commesse = self._commesse_completate(data, data)
+        report = ripartisci_energia(commesse)
+
+        ore_lavorazione, minuti_lavorazione = divmod(sum(
+            _minuti(c['ore_lavorate_commessa_tx'], c['minuti_lavorati_commessa_tx']) for c in commesse), 60)
+        ore_totali, minuti_totali = divmod(sum(
+            _minuti(c['ore_totali_commessa_tx'], c['minuti_totali_commessa_tx']) for c in commesse), 60)
+
         # Il DB ha un solo record per commessa: le letture reali del contatore sono nel CSV del giorno
         letture_csv = self._letture_contatore_giorno(data)
         if letture_csv:
-            result = (min(letture_csv), max(letture_csv), len(letture_csv))
-
-        if result and result[0] is not None and result[1] is not None:
-            prima_lettura = result[0]
-            ultima_lettura = result[1]
-            totale_letture = result[2]
-            
-            # Calcola energia standby. Una commessa può proseguire oltre l'ultima lettura
-            # registrata (es. fino al mattino dopo): il totale non può essere inferiore
-            energia_totale_giorno = max(ultima_lettura - prima_lettura, energia_lavorazioni)
-            energia_standby = energia_totale_giorno - energia_lavorazioni
-            
-            # Statistiche aggiuntive (somma delle commesse completate)
-            ore_lavorazione = sum(c.get('ore_lavorate_commessa_tx', 0) for c in commesse)
-            minuti_lavorazione = sum(c.get('minuti_lavorati_commessa_tx', 0) for c in commesse)
-            
+            prima_lettura, ultima_lettura = min(letture_csv), max(letture_csv)
         else:
-            prima_lettura = ultima_lettura = energia_totale_giorno = energia_standby = 0
-            totale_letture = ore_lavorazione = minuti_lavorazione = 0
-            ore_totali = minuti_totali = 0
-        
-        self.close()
-        
-        return {
+            prima_lettura = min((c['energia_iniziale_wh'] for c in commesse if c['energia_iniziale_wh']), default=0)
+            ultima_lettura = max((c['energia_finale_wh'] or 0 for c in commesse), default=0)
+
+        report.update({
             'data': data,
             'commesse_completate': len(commesse),
-            'energia_lavorazioni_wh': energia_lavorazioni,
-            'energia_lavorazioni_kwh': round(energia_lavorazioni / RAW_TO_KWH, 3),
-            'energia_standby_wh': energia_standby,
-            'energia_standby_kwh': round(energia_standby / RAW_TO_KWH, 3),
-            'energia_totale_wh': energia_totale_giorno,
-            'energia_totale_kwh': round(energia_totale_giorno / RAW_TO_KWH, 3),
             'prima_lettura_wh': prima_lettura,
             'ultima_lettura_wh': ultima_lettura,
-            'totale_letture': totale_letture,
+            'totale_letture': len(letture_csv),
             'ore_lavorazione': ore_lavorazione,
             'minuti_lavorazione': minuti_lavorazione,
             'ore_totali': ore_totali,
             'minuti_totali': minuti_totali,
             'commesse_dettaglio': commesse
-        }
+        })
+        return report
 
     def _letture_contatore_giorno(self, data):
         """Valori del contatore energia (>0) dal log CSV data_YYYY-MM-DD.log, se presente."""
@@ -659,70 +684,21 @@ class TelemetriaDB:
 
     def _calcola_report_intervallo(self, data_inizio, data_fine):
         """Calcola il report energetico per un intervallo [data_inizio, data_fine] (YYYY-MM-DD)."""
-        self.open()
-
-        # Commesse completate nell'intervallo
-        self.cur.execute('''
-            SELECT 
-                commessa_tx,
-                energia_iniziale_wh,
-                energia_finale_wh,
-                energia_consumata_wh,
-                timestamp,
-                descrizione_commessa
-            FROM telemetria
-            WHERE DATE(timestamp) BETWEEN ? AND ?
-              AND stato_lavorazione = 'completata'
-            ORDER BY timestamp ASC
-        ''', (data_inizio, data_fine))
-
-        righe = self.cur.fetchall()
-        colonne = [desc[0] for desc in self.cur.description]
-        commesse = [dict(zip(colonne, r)) for r in righe]
-
-        energia_lavorazioni = sum(c.get('energia_consumata_wh', 0) for c in commesse)
-
-        # Letture progressivo nell'intervallo
-        self.cur.execute('''
-            SELECT 
-                MIN(potenza_consumata_tx) as prima_lettura,
-                MAX(potenza_consumata_tx) as ultima_lettura,
-                COUNT(*) as totale_letture
-            FROM telemetria
-            WHERE DATE(timestamp) BETWEEN ? AND ?
-        ''', (data_inizio, data_fine))
-
-        result = self.cur.fetchone()
-
-        if result and result[0] is not None and result[1] is not None:
-            prima_lettura = result[0]
-            ultima_lettura = result[1]
-            totale_letture = result[2]
-            energia_totale = ultima_lettura - prima_lettura
-            energia_standby = energia_totale - energia_lavorazioni
-        else:
-            prima_lettura = ultima_lettura = energia_totale = energia_standby = 0
-            totale_letture = 0
-
-        self.close()
-
-        return {
+        commesse = self._commesse_completate(data_inizio, data_fine)
+        report = ripartisci_energia(commesse)
+        report.update({
             'intervallo': {
                 'inizio': data_inizio,
                 'fine': data_fine
             },
             'commesse_completate': len(commesse),
-            'energia_lavorazioni_wh': energia_lavorazioni,
-            'energia_lavorazioni_kwh': round(energia_lavorazioni / RAW_TO_KWH, 3),
-            'energia_standby_wh': energia_standby,
-            'energia_standby_kwh': round(energia_standby / RAW_TO_KWH, 3),
-            'energia_totale_wh': energia_totale,
-            'energia_totale_kwh': round(energia_totale / RAW_TO_KWH, 3),
-            'prima_lettura_wh': prima_lettura,
-            'ultima_lettura_wh': ultima_lettura,
-            'totale_letture': totale_letture,
+            # Contatore all'avvio della prima commessa e alla chiusura dell'ultima
+            'prima_lettura_wh': min((c['energia_iniziale_wh'] for c in commesse if c['energia_iniziale_wh']), default=0),
+            'ultima_lettura_wh': max((c['energia_finale_wh'] or 0 for c in commesse), default=0),
+            'totale_letture': len(commesse),
             'commesse_dettaglio': commesse
-        }
+        })
+        return report
 
     def calcola_report_settimanale(self, data_inizio, data_fine):
         """Report energetico settimanale tra due date YYYY-MM-DD (incluse)."""

@@ -3,6 +3,7 @@ from db import TelemetriaDB
 import csv
 import datetime
 import io
+import json
 import os
 import sys
 import time
@@ -277,11 +278,12 @@ def generate_energy_pdf_report(report_data, titolo):
     stats_data = [
         ['Metrica', 'Valore'],
         ['Energia Totale (kWh)', f"{report_data.get('energia_totale_kwh', 0):.3f}"],
-        ['Energia Lavorazioni (kWh)', f"{report_data.get('energia_lavorazioni_kwh', 0):.3f}"],
-        ['Energia Standby (kWh)', f"{report_data.get('energia_standby_kwh', 0):.3f}"],
+        ['Energia Lavorazione (kWh)', f"{report_data.get('energia_lavorazioni_kwh', 0):.3f}"],
+        ['Energia Base, macchina ferma (kWh)', f"{report_data.get('energia_standby_kwh', 0):.3f}"],
+        ['Energia non ripartita (kWh)', f"{report_data.get('energia_non_ripartita_kwh', 0):.3f}"],
         ['Commesse Completate', str(report_data.get('commesse_completate', 0))],
-        ['Prima Lettura (Wh)', str(report_data.get('prima_lettura_wh', 0))],
-        ['Ultima Lettura (Wh)', str(report_data.get('ultima_lettura_wh', 0))],
+        ['Prima Lettura (kWh)', f"{report_data.get('prima_lettura_wh', 0) / RAW_TO_KWH:.2f}"],
+        ['Ultima Lettura (kWh)', f"{report_data.get('ultima_lettura_wh', 0) / RAW_TO_KWH:.2f}"],
         ['Totale Letture', str(report_data.get('totale_letture', 0))],
     ]
 
@@ -301,19 +303,20 @@ def generate_energy_pdf_report(report_data, titolo):
     # Dettaglio commesse (se presente)
     commesse = report_data.get('commesse_dettaglio') or []
     if commesse:
-        headers = ['Timestamp', 'Commessa', 'Energia (Wh)', 'Energia (kWh)', 'Descrizione']
+        headers = ['Timestamp', 'Commessa', 'Energia (kWh)', 'Lavorazione (kWh)', 'Base (kWh)', 'Descrizione']
         data = [headers]
+        kwh = lambda v: '-' if v is None else f"{v / RAW_TO_KWH:.3f}"
         for c in commesse:
-            energia_wh = c.get('energia_consumata_wh', 0)
             data.append([
                 str(c.get('timestamp', '')),
                 str(c.get('commessa_tx', '')),
-                str(energia_wh),
-                f"{energia_wh/RAW_TO_KWH:.3f}",
+                kwh(c.get('energia_consumata_wh', 0)),
+                kwh(c.get('energia_lavorazione_wh')),
+                kwh(c.get('energia_base_wh')),
                 str(c.get('descrizione_commessa', ''))
             ])
 
-        table = Table(data, colWidths=[1.5*inch, 0.9*inch, 1.1*inch, 1.1*inch, 2.3*inch])
+        table = Table(data, colWidths=[1.4*inch, 0.8*inch, 0.9*inch, 1.0*inch, 0.8*inch, 2.0*inch])
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -387,10 +390,14 @@ def report_annuale():
         if 'timestamp' in commessa:
             commessa['timestamp_formatted'] = format_timestamp_for_display(commessa['timestamp'])
     
+    mesi = [db.calcola_report_mensile(anno, m) for m in range(1, 13)]
+    grafico = {k: json.dumps([m[f'energia_{k}_kwh'] for m in mesi]) for k in ('lavorazioni', 'standby', 'non_ripartita')}
+
     return template("report_annuale", 
                    commesse=commesse, 
                    statistiche=statistiche,
                    anno=anno,
+                   grafico=grafico,
                    titolo=f"Report Annuale {anno}")
 
 @app.route('/static/<filename>')

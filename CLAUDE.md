@@ -98,3 +98,10 @@ Aperti:
 - **PLC irraggiungibile**: 192.168.1.2 risponde al ping ma rifiuta TCP su 4840 e 102. Da fine agosto arrivano solo brevi raffiche di dati al mattino. Causa non trovata: va guardato lato PLC/TIA Portal (server OPC UA attivo? limite sessioni?).
 - **`RAW_TO_KWH=100`** da confermare: dai dati risultano ~5 kW in lavorazione e ~0.45 kW a vuoto. Se la macchina ha una potenza ben diversa, il fattore potrebbe essere 10.
 - La copia Git sulla Pi (`~/opc_logger`, ramo dev) ha i file allineati al commit 5433394 ma come modifiche non committate.
+
+## Aggiornamento 2026-10-28 — ripartizione energia nei report
+
+- I report energetici (giornaliero, settimanale, mensile, annuale, PDF, dashboard) dividono l'energia con `ripartisci_energia()` in `db.py`: **base** = `POTENZA_ATTESA_KW` (config.py, 0.41 kW misurati sui CSV di lug–ago) × (ore commessa aperta − ore lavorate), più l'energia consumata tra una commessa e l'altra; **lavorazione** = il resto. Le commesse senza ore dal PLC vanno in "non ripartita". `energia_consumata_wh` per commessa resta invariata. Le chiavi API `energia_standby_*` ora significano "base".
+- Prima "standby" era (MAX−MIN di `potenza_consumata_tx` sulle righe DB) − commesse: dava 813 kWh a luglio e valori negativi ad agosto/settembre. Ora i totali di periodo vengono dai contatori delle commesse (`energia_iniziale/finale_wh`); i salti di contatore tra commesse oltre 20 kWh sono considerati discontinuità dei dati (es. 1120→1000000) e non contati.
+- Il grafico del report annuale (prima fisso a zero) mostra kWh per mese impilati lavorazione/base/non ripartita.
+- Il 28/10 il PLC ha risposto alle 8:14 e alle 16:45: la 1000032 ha avuto le ore salvate dal nuovo CASO 3, la 1000033 è stata registrata dall'inizio alla fine. Resto della giornata: `Connection refused`.

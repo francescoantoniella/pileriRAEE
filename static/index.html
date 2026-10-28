@@ -449,13 +449,13 @@
                     <div class="col-md-3">
                         <div class="stat-item">
                             <div class="stat-value text-success">{{reportData.report.energia_lavorazioni_kwh}}</div>
-                            <div class="stat-label">Energia Lavorazioni (kWh)</div>
+                            <div class="stat-label">Energia Lavorazione (kWh)</div>
                         </div>
                     </div>
                     <div class="col-md-3">
                         <div class="stat-item">
                             <div class="stat-value text-warning">{{reportData.report.energia_standby_kwh}}</div>
-                            <div class="stat-label">Energia Standby (kWh)</div>
+                            <div class="stat-label">Energia Base, macchina accesa ferma (kWh)</div>
                         </div>
                     </div>
                     <div class="col-md-3">
@@ -518,15 +518,21 @@
                                 <div class="progress mb-2">
                                     <div class="progress-bar bg-success" role="progressbar" 
                                          ng-style="{width: (reportData.report.energia_totale_wh ? (reportData.report.energia_lavorazioni_wh / reportData.report.energia_totale_wh * 100) : 0) + '%'}">
-                                        Lavorazioni: {{(reportData.report.energia_lavorazioni_wh / reportData.report.energia_totale_wh * 100) | number:1}}%
+                                        Lavorazione: {{(reportData.report.energia_lavorazioni_wh / reportData.report.energia_totale_wh * 100) | number:1}}%
                                     </div>
                                 </div>
                                 <div class="progress">
                                     <div class="progress-bar bg-warning" role="progressbar" 
                                          ng-style="{width: (reportData.report.energia_totale_wh ? (reportData.report.energia_standby_wh / reportData.report.energia_totale_wh * 100) : 0) + '%'}">
-                                        Standby: {{(reportData.report.energia_standby_wh / reportData.report.energia_totale_wh * 100) | number:1}}%
+                                        Base: {{(reportData.report.energia_standby_wh / reportData.report.energia_totale_wh * 100) | number:1}}%
                                     </div>
                                 </div>
+                                <p class="small text-muted mt-2 mb-0">
+                                    Base = {{reportData.report.potenza_attesa_kw}} kW × (ore commessa aperta − ore lavorate)
+                                    <span ng-show="reportData.report.energia_fuori_commessa_wh > 0">+ {{reportData.report.energia_fuori_commessa_kwh}} kWh consumati fuori commessa</span>.
+                                    Lavorazione = il resto.
+                                    <span ng-show="reportData.report.commesse_non_ripartite > 0"><br>{{reportData.report.commesse_non_ripartite}} commesse senza ore dal PLC ({{reportData.report.energia_non_ripartita_kwh}} kWh) non ripartite.</span>
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -543,6 +549,8 @@
                                     <th>Energia Iniziale (kWh)</th>
                                     <th>Energia Finale (kWh)</th>
                                     <th>Energia Consumata (kWh)</th>
+                                    <th>di cui Lavorazione (kWh)</th>
+                                    <th>di cui Base (kWh)</th>
                                     <th>Descrizione</th>
                                     <th>Timestamp</th>
                                 </tr>
@@ -553,6 +561,8 @@
                                     <td>{{kwh(commessa.energia_iniziale_wh) | number:2}}</td>
                                     <td>{{kwh(commessa.energia_finale_wh) | number:2}}</td>
                                     <td><strong>{{kwh(commessa.energia_consumata_wh) | number:2}}</strong></td>
+                                    <td>{{commessa.energia_lavorazione_wh === null ? '-' : (kwh(commessa.energia_lavorazione_wh) | number:2)}}</td>
+                                    <td>{{commessa.energia_base_wh === null ? '-' : (kwh(commessa.energia_base_wh) | number:2)}}</td>
                                     <td>{{commessa.descrizione_commessa || '-'}}</td>
                                     <td>{{commessa.timestamp}}</td>
                                 </tr>

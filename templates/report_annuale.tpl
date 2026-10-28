@@ -9,7 +9,7 @@
     <!-- Google Font -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
     <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         body {
             font-family: 'Roboto', sans-serif;
@@ -251,16 +251,14 @@
         // Grafico andamento mensile
         const ctx = document.getElementById('monthlyChart').getContext('2d');
         
-        // Dati per il grafico (esempio)
+        // Energia per mese (kWh): lavorazione, base a macchina ferma, commesse senza ore non ripartibili
         const monthlyData = {
             labels: ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'],
-            datasets: [{
-                label: 'Record per mese',
-                data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // Sarà popolato dai dati reali
-                backgroundColor: 'rgba(13, 110, 253, 0.2)',
-                borderColor: 'rgba(13, 110, 253, 1)',
-                borderWidth: 2
-            }]
+            datasets: [
+                { label: 'Lavorazione', data: {{!grafico['lavorazioni']}}, backgroundColor: '#0d6efd' },
+                { label: 'Base (macchina accesa ferma)', data: {{!grafico['standby']}}, backgroundColor: '#6c757d' },
+                { label: 'Non ripartita', data: {{!grafico['non_ripartita']}}, backgroundColor: '#ffc107' }
+            ]
         };
 
         new Chart(ctx, {
@@ -269,9 +267,8 @@
             options: {
                 responsive: true,
                 scales: {
-                    y: {
-                        beginAtZero: true
-                    }
+                    x: { stacked: true },
+                    y: { stacked: true, beginAtZero: true, title: { display: true, text: 'kWh' } }
                 }
             }
         });

@@ -43,13 +43,13 @@
         <div class="col-md-4">
             <div class="card p-3">
                 <div class="stat-value">{{"%.3f" % report['energia_lavorazioni_kwh']}} kWh</div>
-                <div class="stat-label">Energia lavorazioni</div>
+                <div class="stat-label">Energia lavorazione</div>
             </div>
         </div>
         <div class="col-md-4">
             <div class="card p-3">
                 <div class="stat-value">{{"%.3f" % report['energia_standby_kwh']}} kWh</div>
-                <div class="stat-label">Energia standby</div>
+                <div class="stat-label">Energia base (macchina accesa ferma)</div>
             </div>
         </div>
     </div>
@@ -59,6 +59,16 @@
             <div class="card p-3">
                 <h5>Ripartizione energia</h5>
                 <canvas id="pieChart"></canvas>
+                <div class="small text-muted mt-2">
+                    Base = {{report['potenza_attesa_kw']}} kW × (ore commessa aperta − ore lavorate)
+                    % if report['energia_fuori_commessa_wh'] > 0:
+                    + {{"%.2f" % report['energia_fuori_commessa_kwh']}} kWh consumati fuori commessa
+                    % end
+                    . Lavorazione = il resto.
+                    % if report['commesse_non_ripartite']:
+                    <br>{{report['commesse_non_ripartite']}} commesse senza ore dal PLC ({{"%.2f" % report['energia_non_ripartita_kwh']}} kWh) non ripartite.
+                    % end
+                </div>
             </div>
         </div>
         <div class="col-md-6">
@@ -79,8 +89,9 @@
                     <tr>
                         <th>Timestamp</th>
                         <th>Commessa</th>
-                        <th>Energia (Wh)</th>
                         <th>Energia (kWh)</th>
+                        <th>di cui lavorazione (kWh)</th>
+                        <th>di cui base (kWh)</th>
                         <th>Descrizione</th>
                     </tr>
                 </thead>
@@ -90,13 +101,14 @@
                         <tr>
                             <td>{{c['timestamp']}}</td>
                             <td>{{c['commessa_tx']}}</td>
-                            <td>{{c['energia_consumata_wh'] * 10}}</td>
                             <td>{{"%.3f" % (c['energia_consumata_wh']/100.0)}}</td>
+                            <td>{{"-" if c['energia_lavorazione_wh'] is None else "%.3f" % (c['energia_lavorazione_wh']/100.0)}}</td>
+                            <td>{{"-" if c['energia_base_wh'] is None else "%.3f" % (c['energia_base_wh']/100.0)}}</td>
                             <td>{{c.get('descrizione_commessa','')}}</td>
                         </tr>
                     % end
                 % else:
-                    <tr><td colspan="5" class="text-muted text-center">Nessuna commessa completata</td></tr>
+                    <tr><td colspan="6" class="text-muted text-center">Nessuna commessa completata</td></tr>
                 % end
                 </tbody>
             </table>
@@ -106,10 +118,10 @@
     <script>
         const pieCtx = document.getElementById('pieChart');
         const dati = {
-            labels: ['Lavorazioni', 'Standby'],
+            labels: ['Lavorazione', 'Base (macchina accesa ferma)', 'Non ripartita'],
             datasets: [{
-                data: [{{report['energia_lavorazioni_kwh']}}, {{report['energia_standby_kwh']}}],
-                backgroundColor: ['#0d6efd','#6c757d']
+                data: [{{report['energia_lavorazioni_kwh']}}, {{report['energia_standby_kwh']}}, {{report['energia_non_ripartita_kwh']}}],
+                backgroundColor: ['#0d6efd','#6c757d','#ffc107']
             }]
         };
         new Chart(pieCtx, { type: 'pie', data: dati, options: { plugins: { legend: { position: 'bottom' } } } });

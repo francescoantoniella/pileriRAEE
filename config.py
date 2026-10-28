@@ -7,6 +7,11 @@ DATABASE_PATH = "telemetria_ricostruita.db"
 # Il PLC fornisce un progressivo in unità tali che: valore_raw / RAW_TO_KWH = kWh
 RAW_TO_KWH = 100
 
+# Potenza assorbita dalla macchina accesa ma ferma (kW), misurata dai log CSV di luglio-agosto 2026.
+# Serve a ripartire l'energia di ogni commessa: base = POTENZA_ATTESA_KW × (ore aperta − ore lavorate),
+# lavorazione = il resto
+POTENZA_ATTESA_KW = 0.41
+
 # Configurazione OPC UA
 OPCUA_SERVER_URL = "opc.tcp://192.168.1.2:4840"
 OPCUA_NAMESPACE_INDEX = 2
