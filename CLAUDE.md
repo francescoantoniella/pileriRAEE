@@ -118,3 +118,5 @@ Soluzione vera: cambiare IP al dispositivo Hikvision. Ripiego sulla Pi: voce ARP
 ## 2026-10-29 — log CSV compressi
 
 `/etc/cron.daily/opc_logger_csv` (copia di `comprimi_log_csv.sh`) comprime con gzip i `data_*.log` dei giorni passati: 83 MB → 9,9 MB. `utils.apri_log_csv()` / `file_log_csv()` leggono indifferentemente `.log` e `.log.gz` (report giornaliero e script di correzione). I log di servizio in `/var/log` erano già ruotati da logrotate (7 giorni, compressi).
+`/etc/cron.daily/opc_logger_backup` (copia di `backup_db.sh`): ogni giorno copia del DB con l'API di backup SQLite + integrity_check, gzip in `/home/pi/backup_db/`, tiene 30 giorni. Manca ancora una copia fuori dalla Pi.
+Pulizia home Pi (29/10, disco 66% → 47%): rimossi `.cursor-server`, Claude Code 2.1.198 (resta 2.1.204), `pages.tgz`, `backups/*.tar.gz` (marzo 2026) e l'archivio `--exclude=venv` (settembre 2025), dopo averli copiati con checksum verificato sul PC in `~/001-Apps/raee/archivio_impiantoraee/`. Lì, in `db_storici/`, c'è `telemetria_2025-09_2026-03.db`: 102 record da settembre 2025, assenti nel DB attuale.
