@@ -105,3 +105,12 @@ Aperti:
 - Prima "standby" era (MAX−MIN di `potenza_consumata_tx` sulle righe DB) − commesse: dava 813 kWh a luglio e valori negativi ad agosto/settembre. Ora i totali di periodo vengono dai contatori delle commesse (`energia_iniziale/finale_wh`); i salti di contatore tra commesse oltre 20 kWh sono considerati discontinuità dei dati (es. 1120→1000000) e non contati.
 - Il grafico del report annuale (prima fisso a zero) mostra kWh per mese impilati lavorazione/base/non ripartita.
 - Il 28/10 il PLC ha risposto alle 8:14 e alle 16:45: la 1000032 ha avuto le ore salvate dal nuovo CASO 3, la 1000033 è stata registrata dall'inizio alla fine. Resto della giornata: `Connection refused`.
+
+## 2026-10-29 — causa del PLC "irraggiungibile": conflitto di IP
+
+Su 192.168.1.2 rispondono **due dispositivi** (ARP con due MAC):
+- `00:0c:26:65:c8:27`: server OPC UA (porta 4840 aperta, verificato con SYN diretto al MAC): è quello giusto.
+- `08:3b:c1:63:51:a6`: dispositivo **Hikvision** (pagina web `/doc/project_config.json`), 4840 chiusa.
+
+La Pi tiene in cache ARP quasi sempre il MAC Hikvision, da cui i `Connection refused`; le brevi raffiche di dati (≈08:00, a volte nel pomeriggio) sono i momenti in cui la cache punta al PLC. Compatibile con l'inizio dei problemi a fine agosto (probabile installazione della telecamera).
+Soluzione vera: cambiare IP al dispositivo Hikvision. Ripiego sulla Pi: voce ARP statica `ip neigh replace 192.168.1.2 lladdr 00:0c:26:65:c8:27 dev eth0 nud permanent` (va resa persistente; da rivedere se si sostituisce il PLC).
