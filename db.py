@@ -4,6 +4,8 @@ import sqlite3
 import threading
 from datetime import date, timedelta
 
+from utils import apri_log_csv
+
 try:
     from config import RAW_TO_KWH
 except ImportError:
@@ -591,11 +593,13 @@ class TelemetriaDB:
         return report
 
     def _letture_contatore_giorno(self, data):
-        """Valori del contatore energia (>0) dal log CSV data_YYYY-MM-DD.log, se presente."""
+        """Valori del contatore energia (>0) dal log CSV data_YYYY-MM-DD.log(.gz), se presente."""
         path = os.path.join(os.path.dirname(self.db_path), f"data_{data}.log")
+        if not os.path.exists(path):
+            path += '.gz'
         letture = []
         try:
-            with open(path, newline='', encoding='utf-8') as f:
+            with apri_log_csv(path) as f:
                 for riga in csv.DictReader(f):
                     try:
                         valore = int(float(riga['Potenza consumata TX']))

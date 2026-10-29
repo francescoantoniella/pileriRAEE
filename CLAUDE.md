@@ -114,3 +114,7 @@ Su 192.168.1.2 rispondono **due dispositivi** (ARP con due MAC):
 
 La Pi tiene in cache ARP quasi sempre il MAC Hikvision, da cui i `Connection refused`; le brevi raffiche di dati (≈08:00, a volte nel pomeriggio) sono i momenti in cui la cache punta al PLC. Compatibile con l'inizio dei problemi a fine agosto (probabile installazione della telecamera).
 Soluzione vera: cambiare IP al dispositivo Hikvision. Ripiego sulla Pi: voce ARP statica `ip neigh replace 192.168.1.2 lladdr 00:0c:26:65:c8:27 dev eth0 nud permanent` (va resa persistente; da rivedere se si sostituisce il PLC).
+
+## 2026-10-29 — log CSV compressi
+
+`/etc/cron.daily/opc_logger_csv` (copia di `comprimi_log_csv.sh`) comprime con gzip i `data_*.log` dei giorni passati: 83 MB → 9,9 MB. `utils.apri_log_csv()` / `file_log_csv()` leggono indifferentemente `.log` e `.log.gz` (report giornaliero e script di correzione). I log di servizio in `/var/log` erano già ruotati da logrotate (7 giorni, compressi).

@@ -1,4 +1,19 @@
 from datetime import datetime
+import glob
+import gzip
+import os
+
+
+def apri_log_csv(path):
+    """Apre un log CSV giornaliero, anche compresso (i giorni passati vengono gzippati da cron)."""
+    if path.endswith('.gz'):
+        return gzip.open(path, 'rt', newline='', encoding='utf-8')
+    return open(path, newline='', encoding='utf-8')
+
+
+def file_log_csv(cartella):
+    """Log CSV giornalieri della cartella, compressi e non."""
+    return glob.glob(os.path.join(cartella, "data_*.log")) + glob.glob(os.path.join(cartella, "data_*.log.gz"))
 
 def format_timestamp(timestamp_str):
     """

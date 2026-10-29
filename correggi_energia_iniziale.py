@@ -16,17 +16,16 @@ Uso:
 import argparse
 import csv
 import datetime
-import glob
-import os
 import sqlite3
 
+from utils import apri_log_csv, file_log_csv
 from config import DATABASE_PATH, RAW_TO_KWH
 
 
 def leggi_csv(cartella):
     righe = []
-    for path in glob.glob(os.path.join(cartella, "data_*.log")):
-        with open(path, newline="", encoding="utf-8") as f:
+    for path in file_log_csv(cartella):
+        with apri_log_csv(path) as f:
             for r in csv.DictReader(f):
                 try:
                     # La 'Z' dei log è ora locale, non UTC: va solo tolta
