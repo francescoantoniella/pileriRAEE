@@ -17,12 +17,16 @@ class OpcuaReader(DataProvider):
         # Il poller e le richieste web (imposta_commessa) condividono lo stesso client:
         # senza lock uno dei due chiude la sessione dell'altro a metà operazione
         self._io_lock = threading.RLock()
+        # La connessione resta aperta tra una lettura e l'altra (prima: una sessione nuova
+        # ogni 2s, ~43.000 al giorno sul PLC); si chiude solo dopo un errore o allo stop
+        self._connesso = False
 
     def connect(self):
+        self.tag_nodes = {}
         try:
             #print(f"Tentativo di connessione a: {self.server_url}")
             self.client.connect()
-            #print("Connesso al server OPC UA")
+            self._connesso = True
             
             # Prepara i nodi OPC UA
             for name in self.tag_names:
@@ -41,16 +45,27 @@ class OpcuaReader(DataProvider):
             raise
 
     def disconnect(self):
+        self._connesso = False
         try:
             if hasattr(self, 'client') and self.client:
                 self.client.disconnect()
                # print("Disconnesso dal server OPC UA")
         except Exception as e:
-            print(f"Errore nella disconnessione OPC UA: {e}")
+            # Normale se la connessione era già caduta
+            print(f"Disconnessione OPC UA: {e}")
+
+    def _assicura_connessione(self):
+        if not self._connesso:
+            self.connect()
+
+    def stop_polling(self):
+        super().stop_polling()
+        with self._io_lock:
+            self.disconnect()
 
     def read_once(self):
         with self._io_lock:
-            self.connect()
+            self._assicura_connessione()
             result = {"timestamp": datetime.now().isoformat() + "Z"}
 
             # Lettura tutto-o-niente: un tag letto a 0 per errore (es. BadNoCommunication
@@ -63,14 +78,16 @@ class OpcuaReader(DataProvider):
                         result[name] = node.get_value()
                     except Exception as e:
                         raise RuntimeError(f"Errore nella lettura del tag {name}: {e}") from e
-            finally:
+            except Exception:
+                # Connessione forse caduta: si riapre alla prossima lettura
                 self.disconnect()
+                raise
             return result
 
     def write_tags(self, nuova_commessa, nuovo_cer):
         with self._io_lock:
             try:
-                self.connect()
+                self._assicura_connessione()
                 print(f"Tentativo di scrittura: Commessa={nuova_commessa}, CER={nuovo_cer}")
 
                 for tag, valore in (("Commessa RX", nuova_commessa), ("Codice CER RX", nuovo_cer)):
@@ -83,6 +100,5 @@ class OpcuaReader(DataProvider):
 
             except Exception as e:
                 print(f"Errore nella scrittura dei tag OPC UA: {e}")
-                return False
-            finally:
                 self.disconnect()
+                return False

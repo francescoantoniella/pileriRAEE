@@ -114,10 +114,10 @@ def start_poller_in_background(mode=None, max_retries=None, retry_delay=None):
         
         while poller_running and retry_count < max_retries:
             try:
-                retry_count = 0
                 poller.start_polling()
                 poller_running = True
                 print(f"Provider di dati avviato (tentativo {retry_count + 1})")
+                retry_count = 0
                 while poller_running:
                     time.sleep(1)
             except Exception as e:
