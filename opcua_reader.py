@@ -14,6 +14,9 @@ class OpcuaReader(DataProvider):
         self.tag_prefix = tag_prefix
         self.client = Client(self.server_url)
         self.tag_nodes = {}
+        # Il poller e le richieste web (imposta_commessa) condividono lo stesso client:
+        # senza lock uno dei due chiude la sessione dell'altro a metà operazione
+        self._io_lock = threading.RLock()
 
     def connect(self):
         try:
@@ -46,47 +49,40 @@ class OpcuaReader(DataProvider):
             print(f"Errore nella disconnessione OPC UA: {e}")
 
     def read_once(self):
-        #print("Read once")
-        self.connect()
-        result = {"timestamp": datetime.now().isoformat() + "Z"}
-
-        # Lettura tutto-o-niente: un tag letto a 0 per errore (es. BadNoCommunication
-        # subito dopo la riconnessione) verrebbe scambiato per un cambio di stato commessa
-        try:
-            for name, node in self.tag_nodes.items():
-                if node is None:
-                    raise RuntimeError(f"Nodo {name} non disponibile")
-                try:
-                    result[name] = node.get_value()
-                except Exception as e:
-                    raise RuntimeError(f"Errore nella lettura del tag {name}: {e}") from e
-        finally:
-            self.disconnect()
-        return result
-        
-    def write_tags(self, nuova_commessa, nuovo_cer):
-        try:
+        with self._io_lock:
             self.connect()
-            print(f"Tentativo di scrittura: Commessa={nuova_commessa}, CER={nuovo_cer}")
-            
-            # Nodi per la scrittura
-            commessa_node = self.client.get_node("ns=2;s=Siemens S7-1200/S7-1500.Tags.Commessa RX")
-            cer_node = self.client.get_node("ns=2;s=Siemens S7-1200/S7-1500.Tags.Codice CER RX")
-            
-            # Scrittura commessa
-            dv = ua.DataValue()
-            dv.Value = ua.Variant(nuova_commessa, ua.VariantType.UInt32)
-            commessa_node.set_attribute(ua.AttributeIds.Value, dv)
-            
-            # Scrittura CER
-            dv.Value = ua.Variant(nuovo_cer, ua.VariantType.UInt32)
-            cer_node.set_attribute(ua.AttributeIds.Value, dv)
-            
-            print("Scrittura completata con successo")
-            self.disconnect()
-            return True
-            
-        except Exception as e:
-            print(f"Errore nella scrittura dei tag OPC UA: {e}")
-            self.disconnect()
-            return False
+            result = {"timestamp": datetime.now().isoformat() + "Z"}
+
+            # Lettura tutto-o-niente: un tag letto a 0 per errore (es. BadNoCommunication
+            # subito dopo la riconnessione) verrebbe scambiato per un cambio di stato commessa
+            try:
+                for name, node in self.tag_nodes.items():
+                    if node is None:
+                        raise RuntimeError(f"Nodo {name} non disponibile")
+                    try:
+                        result[name] = node.get_value()
+                    except Exception as e:
+                        raise RuntimeError(f"Errore nella lettura del tag {name}: {e}") from e
+            finally:
+                self.disconnect()
+            return result
+
+    def write_tags(self, nuova_commessa, nuovo_cer):
+        with self._io_lock:
+            try:
+                self.connect()
+                print(f"Tentativo di scrittura: Commessa={nuova_commessa}, CER={nuovo_cer}")
+
+                for tag, valore in (("Commessa RX", nuova_commessa), ("Codice CER RX", nuovo_cer)):
+                    node = self.client.get_node(ua.NodeId(f"{self.tag_prefix}{tag}", self.namespace_index))
+                    dv = ua.DataValue(ua.Variant(int(valore), ua.VariantType.UInt32))
+                    node.set_attribute(ua.AttributeIds.Value, dv)
+
+                print("Scrittura completata con successo")
+                return True
+
+            except Exception as e:
+                print(f"Errore nella scrittura dei tag OPC UA: {e}")
+                return False
+            finally:
+                self.disconnect()

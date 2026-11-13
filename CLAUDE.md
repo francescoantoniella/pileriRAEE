@@ -120,3 +120,9 @@ Soluzione vera: cambiare IP al dispositivo Hikvision. Ripiego sulla Pi: voce ARP
 `/etc/cron.daily/opc_logger_csv` (copia di `comprimi_log_csv.sh`) comprime con gzip i `data_*.log` dei giorni passati: 83 MB → 9,9 MB. `utils.apri_log_csv()` / `file_log_csv()` leggono indifferentemente `.log` e `.log.gz` (report giornaliero e script di correzione). I log di servizio in `/var/log` erano già ruotati da logrotate (7 giorni, compressi).
 `/etc/cron.daily/opc_logger_backup` (copia di `backup_db.sh`): ogni giorno copia del DB con l'API di backup SQLite + integrity_check, gzip in `/home/pi/backup_db/`, tiene 30 giorni. Manca ancora una copia fuori dalla Pi.
 Pulizia home Pi (29/10, disco 66% → 47%): rimossi `.cursor-server`, Claude Code 2.1.198 (resta 2.1.204), `pages.tgz`, `backups/*.tar.gz` (marzo 2026) e l'archivio `--exclude=venv` (settembre 2025), dopo averli copiati con checksum verificato sul PC in `~/001-Apps/Pileri/raee/archivio_impiantoraee/`. Lì, in `db_storici/`, c'è `telemetria_2025-09_2026-03.db`: 102 record da settembre 2025, assenti nel DB attuale.
+
+## 2026-11-13 — concorrenza tra poller e richieste web
+
+- `OpcuaReader` ha un `RLock` attorno a `read_once()` e `write_tags()`: prima il poller (connect/read/disconnect ogni 2s) e `imposta_commessa` usavano lo stesso client senza lock, e uno chiudeva la sessione dell'altro (scritture al PLC perse a caso). `write_tags()` ora usa `tag_prefix`/`namespace_index` invece dei NodeId scritti a mano e si disconnette sempre (`finally`).
+- `TelemetriaDB.inserisci_se_nuova()` fa controllo + inserimento sotto lock; usato nei tre punti di `server.py` che prima facevano `commessa_esiste()` + `insert_record()`. È il fix del punto aperto "doppie registrazioni" (test con 20 thread: prima 20 righe, ora 1). Il lock vale dentro un solo processo: non far girare due servizi sullo stesso DB.
+- Verificato con un server OPC UA locale (python-opcua) con gli stessi tag del PLC; non ancora in produzione sulla Pi.

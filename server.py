@@ -651,29 +651,28 @@ def imposta_commessa():
 
     try:
         try:
-            if db.commessa_esiste(commessa_rx):
-                # Commessa già presente: aggiorna solo descrizione e CER se forniti
+            timestamp = datetime.datetime.now().isoformat()
+            record_data = {
+                'timestamp': timestamp,
+                'Commessa RX': commessa_rx,
+                'Codice CER RX': cer_rx,
+                'Codice CER TX': cer_rx,
+                'Commessa TX': commessa_rx,
+                'Ore totali commessa TX': 0,
+                'Minuti totali commessa TX': 0,
+                'Ore lavorate commessa TX': 0,
+                'Minuti lavorati commessa TX': 0,
+                'Potenza consumata TX': 0,
+                'Descrizione commessa': descrizione.strip(),
+                'stato_lavorazione': 'non_iniziata'
+            }
+            if db.inserisci_se_nuova(record_data):
+                print(f"Record creato per commessa {commessa_rx} impostata manualmente")
+            else:
+                # Commessa già presente: aggiorna solo la descrizione, se fornita
                 if descrizione.strip():
                     db.aggiorna_descrizione_commessa(commessa_rx, descrizione.strip())
                 print(f"Commessa {commessa_rx} già presente, aggiornata descrizione")
-            else:
-                timestamp = datetime.datetime.now().isoformat()
-                record_data = {
-                    'timestamp': timestamp,
-                    'Commessa RX': commessa_rx,
-                    'Codice CER RX': cer_rx,
-                    'Codice CER TX': cer_rx,
-                    'Commessa TX': commessa_rx,
-                    'Ore totali commessa TX': 0,
-                    'Minuti totali commessa TX': 0,
-                    'Ore lavorate commessa TX': 0,
-                    'Minuti lavorati commessa TX': 0,
-                    'Potenza consumata TX': 0,
-                    'Descrizione commessa': descrizione.strip(),
-                    'stato_lavorazione': 'non_iniziata'
-                }
-                db.insert_record(record_data)
-                print(f"Record creato per commessa {commessa_rx} impostata manualmente")
 
         except Exception as db_error:
             print(f"Errore nella registrazione del record: {db_error}")
@@ -1047,27 +1046,26 @@ def on_change(new_values, old_values):
         print(f"🔄 Lavorazione iniziata per commessa {crx}")
         
         # Se non esiste un record, crealo automaticamente in stato 'preparazione'
-        if not db.commessa_esiste(crx):
-            try:
-                timestamp = datetime.datetime.now().isoformat()
-                record_data = {
-                    'timestamp': timestamp,
-                    'Commessa RX': crx,
-                    'Codice CER RX': config.get("default_cer", 160214),
-                    'Codice CER TX': config.get("default_cer", 160214),
-                    'Commessa TX': crx,
-                    'Ore totali commessa TX': 0,
-                    'Minuti totali commessa TX': 0,
-                    'Ore lavorate commessa TX': 0,
-                    'Minuti lavorati commessa TX': 0,
-                    'Potenza consumata TX': energia_attuale or 0,
-                    'Descrizione commessa': f"Creato automaticamente all'avvio della lavorazione (commessa {crx})",
-                    'stato_lavorazione': 'preparazione'
-                }
-                db.insert_record(record_data)
+        try:
+            timestamp = datetime.datetime.now().isoformat()
+            record_data = {
+                'timestamp': timestamp,
+                'Commessa RX': crx,
+                'Codice CER RX': config.get("default_cer", 160214),
+                'Codice CER TX': config.get("default_cer", 160214),
+                'Commessa TX': crx,
+                'Ore totali commessa TX': 0,
+                'Minuti totali commessa TX': 0,
+                'Ore lavorate commessa TX': 0,
+                'Minuti lavorati commessa TX': 0,
+                'Potenza consumata TX': energia_attuale or 0,
+                'Descrizione commessa': f"Creato automaticamente all'avvio della lavorazione (commessa {crx})",
+                'stato_lavorazione': 'preparazione'
+            }
+            if db.inserisci_se_nuova(record_data):
                 print(f"📝 Record creato automaticamente per commessa {crx} (preparazione)")
-            except Exception as e:
-                print(f"❌ Errore nella creazione automatica del record: {e}")
+        except Exception as e:
+            print(f"❌ Errore nella creazione automatica del record: {e}")
         
         # Aggiorna il record esistente con energia iniziale e stato
         try:
@@ -1121,27 +1119,26 @@ def on_change(new_values, old_values):
 
                     # Crea comunque il record in stato "preparazione" anche se l'invio al PLC manca,
                     # cosi' resta in DB da poter ri-inviare al PLC alla prossima riconnessione
-                    if not db.commessa_esiste(nuova_commessa):
-                        try:
-                            timestamp = datetime.datetime.now().isoformat()
-                            nuovo_record = {
-                                'timestamp': timestamp,
-                                'Commessa RX': nuova_commessa,
-                                'Codice CER RX': default_cer,
-                                'Codice CER TX': default_cer,
-                                'Commessa TX': nuova_commessa,
-                                'Ore totali commessa TX': 0,
-                                'Minuti totali commessa TX': 0,
-                                'Ore lavorate commessa TX': 0,
-                                'Minuti lavorati commessa TX': 0,
-                                'Potenza consumata TX': energia_attuale or 0,
-                                'Descrizione commessa': f"Creato automaticamente alla chiusura della commessa {ctx}",
-                                'stato_lavorazione': 'preparazione'
-                            }
-                            db.insert_record(nuovo_record)
+                    try:
+                        timestamp = datetime.datetime.now().isoformat()
+                        nuovo_record = {
+                            'timestamp': timestamp,
+                            'Commessa RX': nuova_commessa,
+                            'Codice CER RX': default_cer,
+                            'Codice CER TX': default_cer,
+                            'Commessa TX': nuova_commessa,
+                            'Ore totali commessa TX': 0,
+                            'Minuti totali commessa TX': 0,
+                            'Ore lavorate commessa TX': 0,
+                            'Minuti lavorati commessa TX': 0,
+                            'Potenza consumata TX': energia_attuale or 0,
+                            'Descrizione commessa': f"Creato automaticamente alla chiusura della commessa {ctx}",
+                            'stato_lavorazione': 'preparazione'
+                        }
+                        if db.inserisci_se_nuova(nuovo_record):
                             print(f"📝 Record creato automaticamente per nuova commessa {nuova_commessa} (preparazione)")
-                        except Exception as e:
-                            print(f"❌ Errore creazione record nuova commessa {nuova_commessa}: {e}")
+                    except Exception as e:
+                        print(f"❌ Errore creazione record nuova commessa {nuova_commessa}: {e}")
                 except Exception as e:
                     print(f"Errore nell'auto-preparazione nuova commessa: {e}")
             else:

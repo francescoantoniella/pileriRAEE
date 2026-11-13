@@ -76,6 +76,8 @@ class TelemetriaDB:
     def __init__(self, db_path='telemetria_ricostruita.db'):
         self.db_path = db_path
         self._local = threading.local()
+        # Rende atomico controllo + inserimento tra il thread del poller e quelli web
+        self._lock_inserimento = threading.Lock()
         self.create_table()
 
     @property
@@ -522,6 +524,15 @@ class TelemetriaDB:
                 'energia_media_consumata': round(raw_avg / RAW_TO_KWH, 3),
             }
         return None
+
+    def inserisci_se_nuova(self, data):
+        """Inserisce il record solo se non esiste già una riga per la sua commessa.
+        Restituisce True se l'ha inserito."""
+        with self._lock_inserimento:
+            if self.commessa_esiste(data['Commessa TX']):
+                return False
+            self.insert_record(data)
+            return True
 
     def commessa_esiste(self, commessa_tx):
         """Verifica se esiste già un record per una commessa specifica"""
