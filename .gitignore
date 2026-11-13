@@ -38,6 +38,7 @@ telemetria_ricostruito.db
 
 # File di log
 *.log
+*.log.gz
 
 # File temporanei
 *.tmp
