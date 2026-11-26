@@ -1,4 +1,4 @@
-from bottle import Bottle, run, template, static_file, request, response, TEMPLATE_PATH
+from bottle import Bottle, run, template, static_file, request, response, TEMPLATE_PATH, ServerAdapter
 from db import TelemetriaDB
 import csv
 import datetime
@@ -24,6 +24,45 @@ TEMPLATE_PATH.append(os.path.abspath("./templates"))
 
 app = Bottle()
 db = TelemetriaDB(DATABASE_PATH)
+
+
+class ThreadingWSGIRefServer(ServerAdapter):
+    """wsgiref con un thread per richiesta e timeout sul socket.
+
+    Il server di default di Bottle serve una richiesta alla volta senza timeout:
+    una connessione aperta dal browser che non invia nulla bloccava tutta
+    l'interfaccia web (26/11/2026).
+    """
+    TIMEOUT_CONNESSIONE = 30  # secondi di inattività prima di chiudere il socket
+
+    def run(self, handler):
+        from socketserver import ThreadingMixIn
+        from wsgiref.simple_server import WSGIServer, WSGIRequestHandler, make_server
+
+        class Server(ThreadingMixIn, WSGIServer):
+            daemon_threads = True
+            request_queue_size = 64
+
+            def handle_error(self, request, client_address):
+                # connessioni chiuse per timeout o dal browser: normali, niente traceback nel log
+                if isinstance(sys.exc_info()[1], (TimeoutError, ConnectionError)):
+                    return
+                super().handle_error(request, client_address)
+
+        quiet = self.quiet
+        timeout = self.TIMEOUT_CONNESSIONE
+
+        class Handler(WSGIRequestHandler):
+            def setup(self):
+                self.timeout = timeout
+                super().setup()
+
+            def log_request(self, *args, **kw):
+                if not quiet:
+                    super().log_request(*args, **kw)
+
+        srv = make_server(self.host, self.port, handler, Server, Handler)
+        srv.serve_forever()
 
 # Variabile globale per il provider di dati
 poller = None
@@ -1161,7 +1200,7 @@ def on_change(new_values, old_values):
 def run_server_only():
     """Avvia solo il server web senza provider di dati"""
     print("Avvio server web in modalità standalone (senza provider di dati)")
-    run(app, host=WEB_HOST, port=WEB_PORT, debug=WEB_DEBUG, reloader=False)
+    run(app, server=ThreadingWSGIRefServer, host=WEB_HOST, port=WEB_PORT, debug=WEB_DEBUG, reloader=False)
 
 if __name__ == '__main__':
     # Determina la modalità: argomento a riga di comando, oppure env OPC_LOGGER_MODE, oppure default standalone
@@ -1180,7 +1219,7 @@ if __name__ == '__main__':
     
     try:
         # Avvia sempre il server web, indipendentemente dal poller
-        run(app, host=WEB_HOST, port=WEB_PORT, debug=WEB_DEBUG, reloader=False)
+        run(app, server=ThreadingWSGIRefServer, host=WEB_HOST, port=WEB_PORT, debug=WEB_DEBUG, reloader=False)
     except KeyboardInterrupt:
         print("Interrotto")
     except Exception as e:
