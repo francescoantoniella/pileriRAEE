@@ -129,3 +129,10 @@ Pulizia home Pi (29/10, disco 66% → 47%): rimossi `.cursor-server`, Claude Cod
 - Deploy: il tunnel WireGuard perde i pacchetti grandi (MTU), quindi `scp`/`cat >` di file da decine di KB si bloccano. Far scaricare i file alla Pi: `git fetch origin dev` + `git show origin/dev:file`.
 - Connessione OPC UA persistente: `read_once()`/`write_tags()` riusano la sessione aperta e la chiudono solo dopo un errore (si riapre alla lettura successiva) o in `stop_polling()`. Prima: una sessione nuova ogni 2 s. Test locale: 50 letture = 1 connessione, riconnessione automatica dopo caduta del server.
 - `WEB_DEBUG = False` in `config.py`; in `poller_worker` il contatore dei tentativi non si azzera più a ogni giro.
+
+## 2026-11-26 — interfaccia web bloccata
+
+- Il server web era il `wsgiref` di default di Bottle: una richiesta alla volta, senza timeout. Una connessione aperta da un browser (192.168.1.19) senza inviare la richiesta teneva il thread fermo in `recv`, e tutta l'interfaccia restava appesa; il polling continuava (CSV regolari).
+- Ora `server.py` usa `ThreadingWSGIRefServer` (solo libreria standard): un thread per richiesta, timeout di 30 s sui socket inattivi, niente traceback per timeout/connessioni chiuse. In produzione dal 26/11 (commit de96958, backup `server.py.bak-20261126`).
+- Quel giorno il PLC era raggiungibile dalle 08:30 (ARP sul MAC giusto `00:0c:26:65:c8:27`); prima solo `Connection refused`.
+- Da sistemare: `opcua_reader.py:69` scrive l'ora locale con suffisso `Z` (UTC). La dashboard toglie la `Z` e non sposta l'ora, ma chi legge i CSV come UTC sbaglia di 1 ora.
